@@ -1,0 +1,15 @@
+node_modules/
+client/dist/
+dist/
+release/
+*.log
+.DS_Store
+
+# Local SQLite database and legacy workbook contain real student/staff
+# personal data (names, NRC numbers, fees). Do not commit them.
+server/data/*.db
+server/data/*.db-*
+server/data/*.xlsm
+!server/data/.gitkeep
+
+.env
