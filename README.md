@@ -7,27 +7,31 @@ A Windows/desktop application for Fountain of Peace University College, built wi
 SQLite (better-sqlite3)** on the backend. The starting database is seeded from the
 legacy `SMS_FPC.xlsm` workbook (Student Details + Academic Staff Data sheets).
 
-## What's included in this first build
+## What's included
 
 - **Authentication & roles**: Administrator, Lecturer, Accountant, Student (JWT-based login)
 - **Student records**: search, add/edit, per-student profile with payment history
 - **Academic staff records**: imported from the workbook, grouped by department
 - **Finance**: record fee payments, auto-generated receipt numbers, running balances
+- **PDF documents**: printable payment receipts, student ID cards (with QR code),
+  per-student fee statements, and a filterable students report
+- **Database backups**: on-demand backup, download, and delete from the Backups page
+  (Administrator only)
+- **Audit log**: viewable in-app (Administrator only) — tracks create/update/delete/
+  login/print/download/backup actions
 - **Results**: basic per-student results table (API ready; UI to be expanded in a future sprint)
 - **Dashboard**: total students/staff, fees collected vs outstanding, students by
   program, staff by department, recent payments
 - **User account management** (Administrator only)
-- **Audit log** of create/update/delete/login actions (database table; UI to come)
 - **Data import script** that loads `SMS_FPC.xlsm` into SQLite and can be re-run
   safely to refresh data
 
 ## Not yet built (planned next sprints, per the project roadmap)
 
-PDF report generation, student ID cards / QR codes, database backups, SMS/email
-integration, a polished results/grades UI, and the final Windows installer
-(`Setup.exe`) via `electron-builder` (the config is already in `package.json` —
-running `npm run build` will produce installers, but it hasn't been tested on a
-Windows machine yet).
+SMS/email integration, a fuller results/grades UI (entry + transcripts), scheduled/
+automatic backups, and the final Windows installer (`Setup.exe`) via `electron-builder`
+(the config is already in `package.json` — running `npm run build` will produce
+installers, but it hasn't been tested on a Windows machine yet).
 
 ## Project structure
 
@@ -69,8 +73,24 @@ tukuza-sis-project/
    ```
    npm run dev
    ```
-   This starts the Express API (port 4000), the Vite dev server (port 5173), and
-   opens the Electron window pointed at the dev server, all together.
+   This starts the Vite dev server (port 5173) and opens Electron pointed at it;
+   Electron's main process starts the embedded API server itself (port 4000).
+
+## A note on native modules and Electron
+
+`better-sqlite3` is a native (compiled) module, and Electron bundles its own Node.js
+runtime with a different ABI than your system Node — a module built for one won't
+load in the other. This project handles it as follows:
+
+- `npm install` automatically rebuilds `better-sqlite3` for **Electron's** ABI
+  (via the `postinstall` script), since that's what `npm run dev` and the packaged
+  app use.
+- `npm run import-data` runs the import script *through Electron's own Node runtime*
+  (`ELECTRON_RUN_AS_NODE=1`), so it always matches whatever ABI is currently built —
+  no manual rebuilding needed for normal use.
+- If you ever want to run the API standalone with plain `node` (e.g. `npm run server`
+  for quick `curl` testing outside Electron), run `npm run rebuild:node` first, and
+  `npm run rebuild:electron` afterward to switch back before using `npm run dev` again.
 
 5. **Sign in** with the default administrator account created on first run:
    - Username: `admin`

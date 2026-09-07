@@ -8,7 +8,9 @@ import {
 import SearchIcon from '@mui/icons-material/Search';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import api from '../api';
+import { openPdf } from '../pdf';
 import { useAuth } from '../AuthContext.jsx';
 
 const emptyForm = {
@@ -75,11 +77,20 @@ export default function Students() {
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h5" fontWeight={700}>Students</Typography>
-        {canWrite && (
-          <Button variant="contained" startIcon={<AddIcon />} onClick={openAdd}>
-            Add Student
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            variant="outlined"
+            startIcon={<PictureAsPdfIcon />}
+            onClick={() => openPdf(`/students/report.pdf?search=${encodeURIComponent(search)}`, 'students-report.pdf')}
+          >
+            Export Report
           </Button>
-        )}
+          {canWrite && (
+            <Button variant="contained" startIcon={<AddIcon />} onClick={openAdd}>
+              Add Student
+            </Button>
+          )}
+        </Box>
       </Box>
 
       <TextField

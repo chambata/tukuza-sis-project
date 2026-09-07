@@ -9,6 +9,8 @@ import StudentDetail from './pages/StudentDetail.jsx';
 import Staff from './pages/Staff.jsx';
 import Finance from './pages/Finance.jsx';
 import Users from './pages/Users.jsx';
+import Backups from './pages/Backups.jsx';
+import AuditLog from './pages/AuditLog.jsx';
 
 export default function App() {
   return (
@@ -59,6 +61,22 @@ export default function App() {
         element={
           <ProtectedRoute roles={['Administrator']}>
             <Layout><Users /></Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/backups"
+        element={
+          <ProtectedRoute roles={['Administrator']}>
+            <Layout><Backups /></Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/audit"
+        element={
+          <ProtectedRoute roles={['Administrator']}>
+            <Layout><AuditLog /></Layout>
           </ProtectedRoute>
         }
       />

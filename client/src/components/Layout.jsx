@@ -9,6 +9,8 @@ import SchoolIcon from '@mui/icons-material/School';
 import GroupIcon from '@mui/icons-material/Group';
 import PaymentsIcon from '@mui/icons-material/Payments';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import BackupIcon from '@mui/icons-material/Backup';
+import HistoryIcon from '@mui/icons-material/History';
 import LogoutIcon from '@mui/icons-material/Logout';
 import { useAuth } from '../AuthContext.jsx';
 
@@ -20,6 +22,8 @@ const NAV_ITEMS = [
   { label: 'Academic Staff', path: '/staff', icon: <GroupIcon />, roles: null },
   { label: 'Finance', path: '/finance', icon: <PaymentsIcon />, roles: ['Administrator', 'Accountant'] },
   { label: 'User Accounts', path: '/users', icon: <AdminPanelSettingsIcon />, roles: ['Administrator'] },
+  { label: 'Backups', path: '/backups', icon: <BackupIcon />, roles: ['Administrator'] },
+  { label: 'Audit Log', path: '/audit', icon: <HistoryIcon />, roles: ['Administrator'] },
 ];
 
 export default function Layout({ children }) {

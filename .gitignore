@@ -10,6 +10,7 @@ release/
 server/data/*.db
 server/data/*.db-*
 server/data/*.xlsm
+server/data/backups/
 !server/data/.gitkeep
 
 .env

@@ -15,6 +15,8 @@ app.use('/api/staff', require('./routes/staff'));
 app.use('/api/payments', require('./routes/payments'));
 app.use('/api/results', require('./routes/results'));
 app.use('/api/dashboard', require('./routes/dashboard'));
+app.use('/api/backups', require('./routes/backups'));
+app.use('/api/audit', require('./routes/audit'));
 
 app.use((err, req, res, next) => {
   console.error(err);

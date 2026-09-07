@@ -1,7 +1,9 @@
 const express = require('express');
+const QRCode = require('qrcode');
 const db = require('../db');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { logAction } = require('../audit');
+const { newDocument, footer } = require('../lib/pdf');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -44,12 +46,170 @@ router.get('/programs', (req, res) => {
   res.json(rows.map((r) => r.program));
 });
 
+// GET /api/students/report.pdf?search=&program=&status=  — must be registered
+// before the generic /:id route below, or Express will treat "report.pdf" as an id.
+router.get('/report.pdf', (req, res) => {
+  const { search = '', program = '', status = '' } = req.query;
+  const where = [];
+  const params = {};
+  if (search) {
+    where.push(`(first_name LIKE @q OR surname LIKE @q OR middle_name LIKE @q OR student_id LIKE @q)`);
+    params.q = `%${search}%`;
+  }
+  if (program) { where.push('program = @program'); params.program = program; }
+  if (status) { where.push('status = @status'); params.status = status; }
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const rows = db.prepare(`SELECT * FROM students ${whereSql} ORDER BY surname, first_name`).all(params);
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', 'inline; filename="students-report.pdf"');
+
+  const doc = newDocument({ title: 'Students Report' });
+  doc.pipe(res);
+
+  const filters = [
+    search && `Search: "${search}"`,
+    program && `Program: ${program}`,
+    status && `Status: ${status}`,
+  ].filter(Boolean).join('   ·   ');
+  doc.fontSize(10).fillColor('#444444').text(filters || 'All students', { align: 'left' });
+  doc.fillColor('#000000').moveDown(0.5);
+  doc.fontSize(10).font('Helvetica-Bold').text(`Total: ${rows.length} students`);
+  doc.moveDown();
+
+  const colX = { id: 50, name: 130, program: 300, fees: 430, balance: 500 };
+  function drawHeader() {
+    doc.font('Helvetica-Bold').fontSize(9);
+    doc.text('Student ID', colX.id, doc.y, { continued: false });
+    doc.text('Name', colX.name, doc.y - doc.currentLineHeight());
+    doc.text('Program', colX.program, doc.y - doc.currentLineHeight());
+    doc.text('Paid', colX.fees, doc.y - doc.currentLineHeight());
+    doc.text('Balance', colX.balance, doc.y - doc.currentLineHeight());
+    doc.moveDown(0.3);
+    doc.moveTo(50, doc.y).lineTo(doc.page.width - 50, doc.y).stroke('#cccccc');
+    doc.moveDown(0.3);
+    doc.font('Helvetica').fontSize(9);
+  }
+  drawHeader();
+
+  rows.forEach((r) => {
+    if (doc.y > doc.page.height - 80) {
+      doc.addPage();
+      doc.y = 60;
+      drawHeader();
+    }
+    const rowY = doc.y;
+    doc.text(r.student_id, colX.id, rowY, { width: 75 });
+    doc.text([r.first_name, r.surname].filter(Boolean).join(' '), colX.name, rowY, { width: 165 });
+    doc.text(r.program || '—', colX.program, rowY, { width: 125 });
+    doc.text(`K${Number(r.fees_paid).toLocaleString()}`, colX.fees, rowY, { width: 65 });
+    doc.text(`K${Number(r.balance_owing).toLocaleString()}`, colX.balance, rowY, { width: 65 });
+    doc.moveDown(0.6);
+  });
+
+  footer(doc);
+  doc.end();
+});
+
 router.get('/:id', (req, res) => {
   const student = db.prepare('SELECT * FROM students WHERE id = ?').get(req.params.id);
   if (!student) return res.status(404).json({ error: 'Student not found' });
   const payments = db.prepare('SELECT * FROM payments WHERE student_id = ? ORDER BY payment_date DESC, id DESC').all(req.params.id);
   const results = db.prepare('SELECT * FROM results WHERE student_id = ? ORDER BY academic_year DESC, id DESC').all(req.params.id);
   res.json({ ...student, payments, results });
+});
+
+router.get('/:id/id-card.pdf', async (req, res) => {
+  const student = db.prepare('SELECT * FROM students WHERE id = ?').get(req.params.id);
+  if (!student) return res.status(404).json({ error: 'Student not found' });
+
+  const qrDataUrl = await QRCode.toDataURL(student.student_id, { margin: 1, width: 200 });
+  const qrBuffer = Buffer.from(qrDataUrl.split(',')[1], 'base64');
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="${student.student_id}-id-card.pdf"`);
+
+  // Credit-card sized page (85.6mm x 54mm, in points: 1mm ≈ 2.834pt)
+  const PDFDocument = require('pdfkit');
+  const doc = new PDFDocument({ size: [242.6, 153.0], margin: 0 });
+  doc.pipe(res);
+
+  doc.rect(0, 0, doc.page.width, doc.page.height).fill('#ffffff');
+  doc.rect(0, 0, doc.page.width, 34).fill('#0b5d3b');
+  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(9)
+    .text('FOUNTAIN OF PEACE UNIVERSITY COLLEGE', 8, 6, { width: doc.page.width - 16 });
+  doc.fontSize(7).font('Helvetica').text('Student Identity Card', 8, 20);
+
+  doc.fillColor('#000000').font('Helvetica-Bold').fontSize(10)
+    .text([student.first_name, student.surname].filter(Boolean).join(' '), 8, 42, { width: 150 });
+  doc.font('Helvetica').fontSize(8);
+  doc.text(`ID: ${student.student_id}`, 8, 58);
+  doc.text(`Program: ${student.program || '—'}`, 8, 71, { width: 150 });
+  doc.text(`Class of: ${student.year_of_graduation || '—'}`, 8, 96);
+  doc.text(`Status: ${student.status}`, 8, 109);
+
+  doc.image(qrBuffer, doc.page.width - 62, 42, { width: 54, height: 54 });
+
+  doc.fontSize(6).fillColor('#666666')
+    .text('Property of Fountain of Peace University College. If found, please return.', 8, doc.page.height - 14, {
+      width: doc.page.width - 16,
+    });
+
+  logAction(req, 'PRINT', 'students', student.id, { document: 'id-card' });
+  doc.end();
+});
+
+router.get('/:id/statement.pdf', (req, res) => {
+  const student = db.prepare('SELECT * FROM students WHERE id = ?').get(req.params.id);
+  if (!student) return res.status(404).json({ error: 'Student not found' });
+  const payments = db.prepare('SELECT * FROM payments WHERE student_id = ? ORDER BY payment_date, id').all(req.params.id);
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="${student.student_id}-statement.pdf"`);
+
+  const doc = newDocument({ title: 'Fee Statement' });
+  doc.pipe(res);
+
+  const studentName = [student.first_name, student.middle_name, student.surname].filter(Boolean).join(' ');
+  doc.fontSize(12).font('Helvetica-Bold').text(studentName);
+  doc.font('Helvetica').fontSize(10);
+  doc.text(`Student ID: ${student.student_id}`);
+  doc.text(`Program: ${student.program || '—'}`);
+  doc.text(`Statement date: ${new Date().toLocaleDateString()}`);
+  doc.moveDown();
+
+  doc.font('Helvetica-Bold').fontSize(10);
+  doc.text('Date', 50, doc.y, { continued: false, width: 90 });
+  doc.text('Receipt No.', 140, doc.y - doc.currentLineHeight(), { width: 140 });
+  doc.text('Method', 280, doc.y - doc.currentLineHeight(), { width: 100 });
+  doc.text('Amount', 460, doc.y - doc.currentLineHeight(), { width: 80, align: 'right' });
+  doc.moveDown(0.3);
+  doc.moveTo(50, doc.y).lineTo(doc.page.width - 50, doc.y).stroke('#cccccc');
+  doc.moveDown(0.3);
+  doc.font('Helvetica').fontSize(10);
+
+  if (payments.length === 0) {
+    doc.text('No payments recorded.');
+  }
+  payments.forEach((p) => {
+    const rowY = doc.y;
+    doc.text(p.payment_date, 50, rowY, { width: 90 });
+    doc.text(p.receipt_no, 140, rowY, { width: 140 });
+    doc.text(p.method, 280, rowY, { width: 100 });
+    doc.text(`K${Number(p.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 460, rowY, { width: 80, align: 'right' });
+    doc.moveDown(0.5);
+  });
+
+  doc.moveDown();
+  doc.moveTo(50, doc.y).lineTo(doc.page.width - 50, doc.y).stroke('#cccccc');
+  doc.moveDown(0.5);
+  doc.font('Helvetica-Bold').fontSize(11);
+  doc.text(`Total Fees: K${Number(student.total_fees).toLocaleString(undefined, { minimumFractionDigits: 2 })}`);
+  doc.text(`Total Paid: K${Number(student.fees_paid).toLocaleString(undefined, { minimumFractionDigits: 2 })}`);
+  doc.text(`Balance Owing: K${Number(student.balance_owing).toLocaleString(undefined, { minimumFractionDigits: 2 })}`);
+
+  footer(doc);
+  doc.end();
 });
 
 router.post('/', requireRole(...WRITE_ROLES), (req, res) => {

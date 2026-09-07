@@ -5,8 +5,12 @@ import {
   Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import BadgeIcon from '@mui/icons-material/Badge';
+import DescriptionIcon from '@mui/icons-material/Description';
+import ReceiptIcon from '@mui/icons-material/Receipt';
 import { useAuth } from '../AuthContext.jsx';
 import api from '../api';
+import { openPdf } from '../pdf';
 
 const money = (n) => `K${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
 
@@ -47,6 +51,21 @@ export default function StudentDetail() {
       <Button component={Link} to="/students" startIcon={<ArrowBackIcon />} sx={{ mb: 2 }}>
         Back to Students
       </Button>
+
+      <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+        <Button
+          variant="outlined" size="small" startIcon={<BadgeIcon />}
+          onClick={() => openPdf(`/students/${id}/id-card.pdf`, `${student.student_id}-id-card.pdf`)}
+        >
+          ID Card
+        </Button>
+        <Button
+          variant="outlined" size="small" startIcon={<DescriptionIcon />}
+          onClick={() => openPdf(`/students/${id}/statement.pdf`, `${student.student_id}-statement.pdf`)}
+        >
+          Fee Statement
+        </Button>
+      </Box>
 
       <Paper sx={{ p: 3, mb: 3 }}>
         <Grid container spacing={2}>
@@ -95,6 +114,7 @@ export default function StudentDetail() {
                 <TableCell>Method</TableCell>
                 <TableCell>Received By</TableCell>
                 <TableCell align="right">Amount</TableCell>
+                <TableCell />
               </TableRow>
             </TableHead>
             <TableBody>
@@ -105,6 +125,14 @@ export default function StudentDetail() {
                   <TableCell>{p.method}</TableCell>
                   <TableCell>{p.received_by}</TableCell>
                   <TableCell align="right">{money(p.amount)}</TableCell>
+                  <TableCell align="right">
+                    <Button
+                      size="small" startIcon={<ReceiptIcon />}
+                      onClick={() => openPdf(`/payments/${p.id}/receipt.pdf`, `${p.receipt_no}.pdf`)}
+                    >
+                      Receipt
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
