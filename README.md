@@ -13,13 +13,14 @@ legacy `SMS_FPC.xlsm` workbook (Student Details + Academic Staff Data sheets).
 - **Student records**: search, add/edit, per-student profile with payment history
 - **Academic staff records**: imported from the workbook, grouped by department
 - **Finance**: record fee payments, auto-generated receipt numbers, running balances
+- **Results**: per-student results entry (Administrator/Lecturer), viewable on the
+  student profile, plus an unofficial transcript PDF
 - **PDF documents**: printable payment receipts, student ID cards (with QR code),
-  per-student fee statements, and a filterable students report
+  per-student fee statements, academic transcripts, and a filterable students report
 - **Database backups**: on-demand backup, download, and delete from the Backups page
-  (Administrator only)
+  (Administrator only), plus an automatic daily backup that runs while the app is open
 - **Audit log**: viewable in-app (Administrator only) — tracks create/update/delete/
   login/print/download/backup actions
-- **Results**: basic per-student results table (API ready; UI to be expanded in a future sprint)
 - **Dashboard**: total students/staff, fees collected vs outstanding, students by
   program, staff by department, recent payments
 - **User account management** (Administrator only)
@@ -28,10 +29,10 @@ legacy `SMS_FPC.xlsm` workbook (Student Details + Academic Staff Data sheets).
 
 ## Not yet built (planned next sprints, per the project roadmap)
 
-SMS/email integration, a fuller results/grades UI (entry + transcripts), scheduled/
-automatic backups, and the final Windows installer (`Setup.exe`) via `electron-builder`
-(the config is already in `package.json` — running `npm run build` will produce
-installers, but it hasn't been tested on a Windows machine yet).
+SMS/email integration and offsite/cloud backup sync. A Windows installer **has**
+been built and tested (see below) but only by running the installer's contents
+programmatically — it has not been run through an actual Windows install wizard
+by a human yet, so treat the first real install as a test.
 
 ## Project structure
 

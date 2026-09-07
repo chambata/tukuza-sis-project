@@ -2,12 +2,15 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   Box, Typography, Paper, Grid, Chip, Table, TableHead, TableRow, TableCell, TableBody,
-  Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem,
+  Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem, IconButton,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import BadgeIcon from '@mui/icons-material/Badge';
 import DescriptionIcon from '@mui/icons-material/Description';
 import ReceiptIcon from '@mui/icons-material/Receipt';
+import SchoolIcon from '@mui/icons-material/School';
+import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
 import { useAuth } from '../AuthContext.jsx';
 import api from '../api';
 import { openPdf } from '../pdf';
@@ -18,12 +21,16 @@ export default function StudentDetail() {
   const { id } = useParams();
   const { user } = useAuth();
   const canRecordPayment = ['Administrator', 'Accountant'].includes(user?.role);
+  const canEnterResults = ['Administrator', 'Lecturer'].includes(user?.role);
   const [student, setStudent] = useState(null);
   const [payOpen, setPayOpen] = useState(false);
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('Cash');
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
+  const [resultOpen, setResultOpen] = useState(false);
+  const [resultForm, setResultForm] = useState({ course_name: '', academic_year: '', semester: '', score: '', grade: '' });
+  const [resultError, setResultError] = useState('');
 
   const load = useCallback(() => {
     api.get(`/students/${id}`).then((res) => setStudent(res.data));
@@ -46,6 +53,23 @@ export default function StudentDetail() {
 
   if (!student) return <Typography>Loading…</Typography>;
 
+  async function addResult() {
+    setResultError('');
+    try {
+      await api.post('/results', { student_id: id, ...resultForm });
+      setResultOpen(false);
+      setResultForm({ course_name: '', academic_year: '', semester: '', score: '', grade: '' });
+      load();
+    } catch (err) {
+      setResultError(err.response?.data?.error || 'Failed to add result');
+    }
+  }
+
+  async function deleteResult(resultId) {
+    await api.delete(`/results/${resultId}`);
+    load();
+  }
+
   return (
     <Box>
       <Button component={Link} to="/students" startIcon={<ArrowBackIcon />} sx={{ mb: 2 }}>
@@ -64,6 +88,12 @@ export default function StudentDetail() {
           onClick={() => openPdf(`/students/${id}/statement.pdf`, `${student.student_id}-statement.pdf`)}
         >
           Fee Statement
+        </Button>
+        <Button
+          variant="outlined" size="small" startIcon={<SchoolIcon />}
+          onClick={() => openPdf(`/students/${id}/transcript.pdf`, `${student.student_id}-transcript.pdf`)}
+        >
+          Transcript
         </Button>
       </Box>
 
@@ -139,6 +169,84 @@ export default function StudentDetail() {
           </Table>
         )}
       </Paper>
+
+      <Paper sx={{ p: 3, mt: 3 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+          <Typography fontWeight={600}>Results</Typography>
+          {canEnterResults && (
+            <Button size="small" startIcon={<AddIcon />} onClick={() => setResultOpen(true)}>
+              Add Result
+            </Button>
+          )}
+        </Box>
+        {student.results.length === 0 ? (
+          <Typography color="text.secondary" variant="body2">No results recorded yet.</Typography>
+        ) : (
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Course</TableCell>
+                <TableCell>Academic Year</TableCell>
+                <TableCell>Semester</TableCell>
+                <TableCell align="center">Score</TableCell>
+                <TableCell align="center">Grade</TableCell>
+                <TableCell>Entered By</TableCell>
+                {canEnterResults && <TableCell />}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {student.results.map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell>{r.course_name}</TableCell>
+                  <TableCell>{r.academic_year || '—'}</TableCell>
+                  <TableCell>{r.semester || '—'}</TableCell>
+                  <TableCell align="center">{r.score ?? '—'}</TableCell>
+                  <TableCell align="center">{r.grade || '—'}</TableCell>
+                  <TableCell>{r.entered_by}</TableCell>
+                  {canEnterResults && (
+                    <TableCell align="right">
+                      <IconButton size="small" onClick={() => deleteResult(r.id)}><DeleteIcon fontSize="small" /></IconButton>
+                    </TableCell>
+                  )}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </Paper>
+
+      <Dialog open={resultOpen} onClose={() => setResultOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Add Result</DialogTitle>
+        <DialogContent>
+          {resultError && <Typography color="error" variant="body2" sx={{ mb: 1 }}>{resultError}</Typography>}
+          <TextField
+            label="Course Name" fullWidth sx={{ mt: 1 }}
+            value={resultForm.course_name} onChange={(e) => setResultForm({ ...resultForm, course_name: e.target.value })}
+          />
+          <TextField
+            label="Academic Year (e.g. 2026)" fullWidth sx={{ mt: 2 }}
+            value={resultForm.academic_year} onChange={(e) => setResultForm({ ...resultForm, academic_year: e.target.value })}
+          />
+          <TextField
+            select label="Semester" fullWidth sx={{ mt: 2 }}
+            value={resultForm.semester} onChange={(e) => setResultForm({ ...resultForm, semester: e.target.value })}
+          >
+            {['Semester 1', 'Semester 2', 'Full Year'].map((s) => <MenuItem key={s} value={s}>{s}</MenuItem>)}
+          </TextField>
+          <TextField
+            label="Score" type="number" fullWidth sx={{ mt: 2 }}
+            value={resultForm.score} onChange={(e) => setResultForm({ ...resultForm, score: e.target.value })}
+          />
+          <TextField
+            label="Grade (e.g. A, B+, Distinction)" fullWidth sx={{ mt: 2 }}
+            value={resultForm.grade} onChange={(e) => setResultForm({ ...resultForm, grade: e.target.value })}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setResultOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={addResult}>Save Result</Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={payOpen} onClose={() => setPayOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle>Record Payment</DialogTitle>

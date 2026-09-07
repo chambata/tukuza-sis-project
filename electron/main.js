@@ -15,6 +15,14 @@ function startServer() {
   // Requiring the server module starts the Express API on PORT (default 4000).
   require('../server/index.js');
   serverStarted = true;
+
+  // Automatic backups: run once at startup (skipped if a backup already exists
+  // from the last 24h), then re-check every 6 hours in case the app is left open.
+  const { backupIfStale } = require('../server/lib/backup');
+  backupIfStale().catch((err) => console.error('[backup] automatic backup failed', err));
+  setInterval(() => {
+    backupIfStale().catch((err) => console.error('[backup] automatic backup failed', err));
+  }, 6 * 60 * 60 * 1000);
 }
 
 function createWindow() {

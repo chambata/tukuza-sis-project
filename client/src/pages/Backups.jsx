@@ -74,6 +74,11 @@ export default function Backups() {
         cloud storage — a local backup won't survive a hardware failure.
       </Alert>
 
+      <Alert severity="info" sx={{ mb: 2 }}>
+        The app also backs up automatically once a day while it's open, in addition
+        to anything you trigger manually here.
+      </Alert>
+
       <Paper>
         <Table size="small">
           <TableHead>
