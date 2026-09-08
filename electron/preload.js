@@ -1,8 +1,9 @@
-const { contextBridge } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 
-// Reserved for future native integrations (printing, file dialogs, etc.).
-// The renderer talks to the local Express API over HTTP (http://localhost:4000/api),
-// so no IPC bridge is required for normal app functionality yet.
+// The renderer talks to the local Express API over HTTP for all normal data
+// access (http://localhost:4000/api). This bridge only covers the bits that
+// need real OS integration and can't go through HTTP: native file dialogs.
 contextBridge.exposeInMainWorld('tukuzaSIS', {
   version: process.env.npm_package_version || '0.1.0',
+  chooseBackupFolder: () => ipcRenderer.invoke('choose-backup-folder'),
 });

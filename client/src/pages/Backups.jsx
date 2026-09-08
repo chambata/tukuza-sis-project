@@ -6,8 +6,9 @@ import {
 import BackupIcon from '@mui/icons-material/Backup';
 import DownloadIcon from '@mui/icons-material/Download';
 import DeleteIcon from '@mui/icons-material/Delete';
+import FolderIcon from '@mui/icons-material/Folder';
+import SyncIcon from '@mui/icons-material/Sync';
 import api from '../api';
-import { useAuth } from '../AuthContext.jsx';
 
 function formatSize(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -19,9 +20,12 @@ export default function Backups() {
   const [rows, setRows] = useState([]);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [secondaryFolder, setSecondaryFolder] = useState(null);
+  const [syncBusy, setSyncBusy] = useState(false);
 
   const load = useCallback(() => {
     api.get('/backups').then((res) => setRows(res.data));
+    api.get('/backups/settings/secondary-folder').then((res) => setSecondaryFolder(res.data.folder));
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -31,7 +35,11 @@ export default function Backups() {
     setMessage('');
     try {
       const res = await api.post('/backups');
-      setMessage(`Backup created: ${res.data.filename}`);
+      setMessage(
+        res.data.mirrored
+          ? `Backup created and copied to your secondary folder: ${res.data.filename}`
+          : `Backup created: ${res.data.filename}`
+      );
       load();
     } catch (err) {
       setMessage(err.response?.data?.error || 'Backup failed');
@@ -57,6 +65,36 @@ export default function Backups() {
     load();
   }
 
+  async function chooseFolder() {
+    if (!window.tukuzaSIS?.chooseBackupFolder) {
+      setMessage('Folder picker is only available inside the desktop app.');
+      return;
+    }
+    const folder = await window.tukuzaSIS.chooseBackupFolder();
+    if (!folder) return;
+    await api.put('/backups/settings/secondary-folder', { folder });
+    setSecondaryFolder(folder);
+    setMessage(`Backups will now also be copied to: ${folder}`);
+  }
+
+  async function clearFolder() {
+    await api.put('/backups/settings/secondary-folder', { folder: null });
+    setSecondaryFolder(null);
+  }
+
+  async function syncNow() {
+    setSyncBusy(true);
+    setMessage('');
+    try {
+      const res = await api.post('/backups/settings/secondary-folder/sync-now');
+      setMessage(`Copied ${res.data.copied} backup(s) to the secondary folder.`);
+    } catch (err) {
+      setMessage(err.response?.data?.error || 'Sync failed');
+    } finally {
+      setSyncBusy(false);
+    }
+  }
+
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -68,11 +106,29 @@ export default function Backups() {
 
       {message && <Alert severity="info" sx={{ mb: 2 }}>{message}</Alert>}
 
-      <Alert severity="warning" sx={{ mb: 2 }}>
-        Backups are stored on this machine only, alongside the live database. For real
-        protection, periodically copy the downloaded files to a separate drive or
-        cloud storage — a local backup won't survive a hardware failure.
-      </Alert>
+      <Paper sx={{ p: 2.5, mb: 2 }}>
+        <Typography fontWeight={600} sx={{ mb: 1 }}>Offsite / Cloud Copy</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+          Point this at a folder synced by OneDrive, Google Drive, Dropbox, or similar,
+          and every backup — manual or automatic — is copied there too. This is the
+          real protection against a hardware failure; local backups alone are not.
+        </Typography>
+        {secondaryFolder ? (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+            <FolderIcon fontSize="small" color="action" />
+            <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>{secondaryFolder}</Typography>
+            <Button size="small" onClick={chooseFolder}>Change</Button>
+            <Button size="small" onClick={clearFolder}>Turn off</Button>
+            <Button size="small" startIcon={<SyncIcon />} onClick={syncNow} disabled={syncBusy}>
+              {syncBusy ? 'Syncing…' : 'Copy existing backups now'}
+            </Button>
+          </Box>
+        ) : (
+          <Button variant="outlined" size="small" startIcon={<FolderIcon />} onClick={chooseFolder}>
+            Choose Folder
+          </Button>
+        )}
+      </Paper>
 
       <Alert severity="info" sx={{ mb: 2 }}>
         The app also backs up automatically once a day while it's open, in addition

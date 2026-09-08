@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 
 const isDev = process.env.NODE_ENV === 'development';
@@ -52,6 +52,19 @@ function createWindow() {
 app.whenReady().then(() => {
   startServer();
   createWindow();
+
+  // Native folder picker for the offsite/cloud backup mirror location (e.g. a
+  // synced OneDrive/Google Drive/Dropbox folder). The renderer can't show OS
+  // dialogs directly, so it asks the main process via this IPC channel and
+  // then saves the chosen path itself through the normal API.
+  ipcMain.handle('choose-backup-folder', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory', 'createDirectory'],
+      title: 'Choose a folder to also copy backups to',
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
+  });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

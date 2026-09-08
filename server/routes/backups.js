@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { logAction } = require('../audit');
-const { BACKUP_DIR, listBackups, runBackup } = require('../lib/backup');
+const { BACKUP_DIR, listBackups, runBackup, getSecondaryFolder, setSecondaryFolder, mirrorAllToSecondary } = require('../lib/backup');
 
 const router = express.Router();
 router.use(requireAuth, requireRole('Administrator'));
@@ -14,9 +14,9 @@ router.get('/', (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const filename = await runBackup();
-    logAction(req, 'BACKUP', 'database', null, { filename });
-    res.status(201).json({ filename });
+    const result = await runBackup();
+    logAction(req, 'BACKUP', 'database', null, { filename: result.filename, mirrored: result.mirrored });
+    res.status(201).json(result);
   } catch (err) {
     console.error('[backup] failed', err);
     res.status(500).json({ error: 'Backup failed' });
@@ -38,6 +38,24 @@ router.delete('/:filename', (req, res) => {
   fs.unlinkSync(filePath);
   logAction(req, 'DELETE', 'database', null, { filename });
   res.json({ ok: true });
+});
+
+router.get('/settings/secondary-folder', (req, res) => {
+  res.json({ folder: getSecondaryFolder() });
+});
+
+router.put('/settings/secondary-folder', (req, res) => {
+  const { folder } = req.body || {};
+  setSecondaryFolder(folder || null);
+  logAction(req, 'UPDATE', 'settings', null, { secondary_backup_folder: folder });
+  res.json({ ok: true });
+});
+
+router.post('/settings/secondary-folder/sync-now', (req, res) => {
+  const result = mirrorAllToSecondary();
+  if (result.error) return res.status(400).json({ error: result.error });
+  logAction(req, 'SYNC', 'database', null, { copied: result.copied });
+  res.json(result);
 });
 
 module.exports = router;

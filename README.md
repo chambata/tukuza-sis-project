@@ -42,6 +42,9 @@ legacy `SMS_FPC.xlsm` workbook (Student Details + Academic Staff Data sheets).
   Lecturer to a programme, activate/deactivate (Administrator only)
 - **Data import script** that loads `SMS_FPC.xlsm` into SQLite and can be re-run
   safely to refresh data
+- **Offsite/cloud backup mirror**: point the Backups page at any local folder —
+  including one synced by OneDrive, Google Drive, Dropbox, etc. — and every backup
+  (manual or automatic) is copied there too, via a native OS folder picker
 
 ### Access control notes
 
@@ -53,10 +56,11 @@ regression pass covering every sensitive endpoint.
 
 ## Not yet built (planned next sprints, per the project roadmap)
 
-SMS/email integration and offsite/cloud backup sync. A Windows installer **has**
-been built and tested (see below) but only by running the installer's contents
-programmatically — it has not been run through an actual Windows install wizard
-by a human yet, so treat the first real install as a test.
+SMS/email integration (would need a provider account — Twilio, an SMTP relay,
+etc. — that this project doesn't have credentials for). A Windows installer
+**has** been built and tested (see below) but only by running the installer's
+contents programmatically — it has not been run through an actual Windows
+install wizard by a human yet, so treat the first real install as a test.
 
 ## Project structure
 
