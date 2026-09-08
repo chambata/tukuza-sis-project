@@ -7,7 +7,21 @@ CREATE TABLE IF NOT EXISTS users (
   full_name TEXT,
   role TEXT NOT NULL CHECK (role IN ('Administrator','Lecturer','Accountant','Student')),
   linked_student_id INTEGER REFERENCES students(id),
+  assigned_program TEXT,
   is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS programmes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT UNIQUE NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS academic_years (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  label TEXT UNIQUE NOT NULL,
+  is_current INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -77,11 +91,15 @@ CREATE TABLE IF NOT EXISTS results (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
   course_name TEXT NOT NULL,
+  type TEXT NOT NULL DEFAULT 'Exam' CHECK (type IN ('CA','Exam')),
   academic_year TEXT,
   semester TEXT,
   score REAL,
   grade TEXT,
+  status TEXT NOT NULL DEFAULT 'Draft' CHECK (status IN ('Draft','Approved')),
   entered_by TEXT,
+  approved_by TEXT,
+  approved_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

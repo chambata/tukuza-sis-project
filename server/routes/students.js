@@ -1,17 +1,30 @@
 const express = require('express');
+const bcrypt = require('bcryptjs');
 const QRCode = require('qrcode');
 const db = require('../db');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { logAction } = require('../audit');
 const { newDocument, footer } = require('../lib/pdf');
+const { computeGPA } = require('../lib/grades');
 
 const router = express.Router();
 router.use(requireAuth);
 
 const WRITE_ROLES = ['Administrator', 'Accountant'];
+const STAFF_ROLES = ['Administrator', 'Lecturer', 'Accountant']; // any role except Student
+
+// Allows staff roles to access any student's documents, and allows a Student
+// role to access only the documents for their own linked student record.
+function staffOrSelf(req, res, next) {
+  if (STAFF_ROLES.includes(req.user.role)) return next();
+  if (req.user.role === 'Student' && String(req.user.linked_student_id) === String(req.params.id)) {
+    return next();
+  }
+  return res.status(403).json({ error: 'You do not have permission to access this record' });
+}
 
 // GET /api/students?search=&program=&page=1&pageSize=25
-router.get('/', (req, res) => {
+router.get('/', requireRole(...STAFF_ROLES), (req, res) => {
   const { search = '', program = '', status = '', page = '1', pageSize = '25' } = req.query;
   const p = Math.max(1, parseInt(page, 10) || 1);
   const size = Math.min(200, Math.max(1, parseInt(pageSize, 10) || 25));
@@ -41,14 +54,14 @@ router.get('/', (req, res) => {
   res.json({ data: rows, total, page: p, pageSize: size });
 });
 
-router.get('/programs', (req, res) => {
+router.get('/programs', requireRole(...STAFF_ROLES), (req, res) => {
   const rows = db.prepare('SELECT DISTINCT program FROM students WHERE program IS NOT NULL ORDER BY program').all();
   res.json(rows.map((r) => r.program));
 });
 
 // GET /api/students/report.pdf?search=&program=&status=  — must be registered
 // before the generic /:id route below, or Express will treat "report.pdf" as an id.
-router.get('/report.pdf', (req, res) => {
+router.get('/report.pdf', requireRole(...STAFF_ROLES), (req, res) => {
   const { search = '', program = '', status = '' } = req.query;
   const where = [];
   const params = {};
@@ -111,15 +124,56 @@ router.get('/report.pdf', (req, res) => {
   doc.end();
 });
 
-router.get('/:id', (req, res) => {
+// GET /api/students/me — self-service endpoint for the Student role. Must be
+// registered before the generic /:id route below.
+router.get('/me', requireRole('Student'), (req, res) => {
+  if (!req.user.linked_student_id) {
+    return res.status(404).json({ error: 'Your account is not linked to a student record. Contact the registrar.' });
+  }
+  const student = db.prepare('SELECT * FROM students WHERE id = ?').get(req.user.linked_student_id);
+  if (!student) return res.status(404).json({ error: 'Linked student record not found' });
+  const payments = db.prepare('SELECT * FROM payments WHERE student_id = ? ORDER BY payment_date DESC, id DESC').all(student.id);
+  const results = db.prepare('SELECT * FROM results WHERE student_id = ? ORDER BY academic_year DESC, semester, type, id').all(student.id);
+  res.json({ ...student, payments, results, gpa: computeGPA(results) });
+});
+
+router.post('/:id/create-login', requireRole('Administrator'), (req, res) => {
+  const student = db.prepare('SELECT * FROM students WHERE id = ?').get(req.params.id);
+  if (!student) return res.status(404).json({ error: 'Student not found' });
+  const existingLink = db.prepare('SELECT id FROM users WHERE linked_student_id = ?').get(student.id);
+  if (existingLink) return res.status(409).json({ error: 'This student already has a login account' });
+
+  const { password } = req.body || {};
+  if (!password || password.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  }
+  try {
+    const hash = bcrypt.hashSync(password, 10);
+    const fullName = [student.first_name, student.surname].filter(Boolean).join(' ');
+    const info = db.prepare(`
+      INSERT INTO users (username, password_hash, full_name, role, linked_student_id)
+      VALUES (?, ?, ?, 'Student', ?)
+    `).run(student.student_id, hash, fullName, student.id);
+    logAction(req, 'CREATE', 'users', info.lastInsertRowid, { username: student.student_id, role: 'Student', linked_student_id: student.id });
+    res.status(201).json({ id: info.lastInsertRowid, username: student.student_id });
+  } catch (err) {
+    if (String(err.message).includes('UNIQUE')) {
+      return res.status(409).json({ error: 'A login with this Student ID already exists' });
+    }
+    res.status(500).json({ error: 'Failed to create login' });
+  }
+});
+
+router.get('/:id', requireRole(...STAFF_ROLES), (req, res) => {
   const student = db.prepare('SELECT * FROM students WHERE id = ?').get(req.params.id);
   if (!student) return res.status(404).json({ error: 'Student not found' });
   const payments = db.prepare('SELECT * FROM payments WHERE student_id = ? ORDER BY payment_date DESC, id DESC').all(req.params.id);
-  const results = db.prepare('SELECT * FROM results WHERE student_id = ? ORDER BY academic_year DESC, id DESC').all(req.params.id);
-  res.json({ ...student, payments, results });
+  const results = db.prepare('SELECT * FROM results WHERE student_id = ? ORDER BY academic_year DESC, semester, type, id').all(req.params.id);
+  const loginAccount = db.prepare('SELECT id, username, is_active FROM users WHERE linked_student_id = ?').get(req.params.id);
+  res.json({ ...student, payments, results, loginAccount: loginAccount || null });
 });
 
-router.get('/:id/id-card.pdf', async (req, res) => {
+router.get('/:id/id-card.pdf', staffOrSelf, async (req, res) => {
   const student = db.prepare('SELECT * FROM students WHERE id = ?').get(req.params.id);
   if (!student) return res.status(404).json({ error: 'Student not found' });
 
@@ -159,12 +213,13 @@ router.get('/:id/id-card.pdf', async (req, res) => {
   doc.end();
 });
 
-router.get('/:id/transcript.pdf', (req, res) => {
+router.get('/:id/transcript.pdf', staffOrSelf, (req, res) => {
   const student = db.prepare('SELECT * FROM students WHERE id = ?').get(req.params.id);
   if (!student) return res.status(404).json({ error: 'Student not found' });
   const results = db.prepare(
-    'SELECT * FROM results WHERE student_id = ? ORDER BY academic_year, semester, course_name'
+    "SELECT * FROM results WHERE student_id = ? AND status = 'Approved' ORDER BY academic_year, semester, type, course_name"
   ).all(req.params.id);
+  const gpa = computeGPA(results);
 
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="${student.student_id}-transcript.pdf"`);
@@ -178,11 +233,12 @@ router.get('/:id/transcript.pdf', (req, res) => {
   doc.text(`Student ID: ${student.student_id}`);
   doc.text(`Program: ${student.program || '—'}`);
   doc.text(`Status: ${student.status}`);
+  if (gpa !== null) doc.text(`Cumulative GPA: ${gpa.toFixed(2)}`);
   doc.text(`Transcript date: ${new Date().toLocaleDateString()}`);
   doc.moveDown();
 
   if (results.length === 0) {
-    doc.text('No results have been recorded for this student yet.');
+    doc.text('No approved results are on record for this student yet.');
   } else {
     let currentYear = null;
     results.forEach((r) => {
@@ -190,24 +246,25 @@ router.get('/:id/transcript.pdf', (req, res) => {
       if (yearLabel !== currentYear) {
         currentYear = yearLabel;
         doc.moveDown(0.5);
-        doc.font('Helvetica-Bold').fontSize(10).text(yearLabel);
+        doc.font('Helvetica-Bold').fontSize(10).text(yearLabel, 50, doc.y, { width: doc.page.width - 100 });
         doc.moveTo(50, doc.y).lineTo(doc.page.width - 50, doc.y).stroke('#cccccc');
         doc.moveDown(0.2);
         doc.font('Helvetica').fontSize(10);
       }
       const rowY = doc.y;
-      doc.text(r.course_name, 60, rowY, { width: 320 });
-      doc.text(r.score != null ? String(r.score) : '—', 400, rowY, { width: 60, align: 'center' });
-      doc.text(r.grade || '—', 470, rowY, { width: 60, align: 'center' });
+      doc.text(r.course_name, 60, rowY, { width: 260 });
+      doc.text(r.type, 325, rowY, { width: 50, align: 'center' });
+      doc.text(r.score != null ? String(r.score) : '—', 380, rowY, { width: 55, align: 'center' });
+      doc.text(r.grade || '—', 440, rowY, { width: 55, align: 'center' });
       doc.moveDown(0.4);
     });
   }
 
-  footer(doc, 'Unofficial transcript generated by the Tukuza SIS. Contact the registrar for a certified copy.');
+  footer(doc, 'Unofficial transcript generated by the Tukuza SIS. Contact the registrar for a certified copy. Only approved results are shown.');
   doc.end();
 });
 
-router.get('/:id/statement.pdf', (req, res) => {
+router.get('/:id/statement.pdf', staffOrSelf, (req, res) => {
   const student = db.prepare('SELECT * FROM students WHERE id = ?').get(req.params.id);
   if (!student) return res.status(404).json({ error: 'Student not found' });
   const payments = db.prepare('SELECT * FROM payments WHERE student_id = ? ORDER BY payment_date, id').all(req.params.id);

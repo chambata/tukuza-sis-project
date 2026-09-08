@@ -9,7 +9,7 @@ router.use(requireAuth, requireRole('Administrator'));
 
 router.get('/', (req, res) => {
   const users = db.prepare(
-    'SELECT id, username, full_name, role, is_active, created_at FROM users ORDER BY username'
+    'SELECT id, username, full_name, role, is_active, assigned_program, linked_student_id, created_at FROM users ORDER BY username'
   ).all();
   res.json(users);
 });
@@ -51,6 +51,18 @@ router.put('/:id/reset-password', (req, res) => {
   const hash = bcrypt.hashSync(newPassword, 10);
   db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, req.params.id);
   logAction(req, 'RESET_PASSWORD', 'users', req.params.id);
+  res.json({ ok: true });
+});
+
+router.put('/:id/assign-program', (req, res) => {
+  const { program } = req.body || {};
+  const existing = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'User not found' });
+  if (existing.role !== 'Lecturer') {
+    return res.status(400).json({ error: 'Only Lecturer accounts can be assigned a programme' });
+  }
+  db.prepare('UPDATE users SET assigned_program = ? WHERE id = ?').run(program || null, req.params.id);
+  logAction(req, 'UPDATE', 'users', req.params.id, { assigned_program: program });
   res.json({ ok: true });
 });
 

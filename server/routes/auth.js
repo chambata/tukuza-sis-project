@@ -16,7 +16,14 @@ router.post('/login', (req, res) => {
   if (!user || !bcrypt.compareSync(password, user.password_hash)) {
     return res.status(401).json({ error: 'Invalid username or password' });
   }
-  const payload = { id: user.id, username: user.username, role: user.role, full_name: user.full_name };
+  const payload = {
+    id: user.id,
+    username: user.username,
+    role: user.role,
+    full_name: user.full_name,
+    linked_student_id: user.linked_student_id || null,
+    assigned_program: user.assigned_program || null,
+  };
   const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '12h' });
   req.user = payload;
   logAction(req, 'LOGIN', 'users', user.id);

@@ -1,9 +1,9 @@
 const express = require('express');
 const db = require('../db');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
-router.use(requireAuth);
+router.use(requireAuth, requireRole('Administrator', 'Lecturer', 'Accountant'));
 
 router.get('/', (req, res) => {
   const totals = db.prepare(`

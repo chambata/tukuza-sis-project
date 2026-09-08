@@ -20,7 +20,14 @@ function nextReceiptNo() {
   return `FPC-${year}-${String(seq).padStart(5, '0')}`;
 }
 
-router.get('/', (req, res) => {
+function recalcStudentBalance(studentId) {
+  const totalPaid = db.prepare('SELECT COALESCE(SUM(amount),0) AS total FROM payments WHERE student_id = ?').get(studentId).total;
+  const student = db.prepare('SELECT total_fees FROM students WHERE id = ?').get(studentId);
+  db.prepare(`UPDATE students SET fees_paid = ?, balance_owing = ?, updated_at = datetime('now') WHERE id = ?`)
+    .run(totalPaid, student.total_fees - totalPaid, studentId);
+}
+
+router.get('/', requireRole('Administrator', 'Accountant'), (req, res) => {
   const { studentId } = req.query;
   if (studentId) {
     return res.json(db.prepare('SELECT * FROM payments WHERE student_id = ? ORDER BY payment_date DESC, id DESC').all(studentId));
@@ -63,10 +70,7 @@ router.post('/', requireRole('Administrator', 'Accountant'), (req, res) => {
       received_by: req.user.full_name || req.user.username,
       notes: notes || null,
     });
-    const newPaid = student.fees_paid + amt;
-    db.prepare(`
-      UPDATE students SET fees_paid = ?, balance_owing = ?, updated_at = datetime('now') WHERE id = ?
-    `).run(newPaid, student.total_fees - newPaid, student_id);
+    recalcStudentBalance(student_id);
     return info.lastInsertRowid;
   });
   const id = txn();
@@ -74,7 +78,111 @@ router.post('/', requireRole('Administrator', 'Accountant'), (req, res) => {
   res.status(201).json({ id, receipt_no: receiptNo });
 });
 
-router.get('/:id/receipt', (req, res) => {
+router.put('/:id', requireRole('Administrator', 'Accountant'), (req, res) => {
+  const existing = db.prepare('SELECT * FROM payments WHERE id = ?').get(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Payment not found' });
+  const { amount, method, notes, payment_date } = req.body || {};
+  const amt = amount != null ? Number(amount) : existing.amount;
+  if (!amt || amt <= 0) return res.status(400).json({ error: 'Amount must be positive' });
+
+  const txn = db.transaction(() => {
+    db.prepare(`
+      UPDATE payments SET amount = ?, method = ?, notes = ?, payment_date = ? WHERE id = ?
+    `).run(amt, method || existing.method, notes ?? existing.notes, payment_date || existing.payment_date, req.params.id);
+    recalcStudentBalance(existing.student_id);
+  });
+  txn();
+  logAction(req, 'UPDATE', 'payments', req.params.id, req.body);
+  res.json({ ok: true });
+});
+
+router.delete('/:id', requireRole('Administrator', 'Accountant'), (req, res) => {
+  const existing = db.prepare('SELECT * FROM payments WHERE id = ?').get(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Payment not found' });
+  const txn = db.transaction(() => {
+    db.prepare('DELETE FROM payments WHERE id = ?').run(req.params.id);
+    recalcStudentBalance(existing.student_id);
+  });
+  txn();
+  logAction(req, 'DELETE', 'payments', req.params.id, { receipt_no: existing.receipt_no });
+  res.json({ ok: true });
+});
+
+router.get('/report.pdf', requireRole('Administrator', 'Accountant'), (req, res) => {
+  const { from, to } = req.query;
+  const where = [];
+  const params = {};
+  if (from) { where.push('payment_date >= @from'); params.from = from; }
+  if (to) { where.push('payment_date <= @to'); params.to = to; }
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+  const rows = db.prepare(`
+    SELECT p.*, s.first_name, s.surname, s.student_id AS student_number, s.program
+    FROM payments p JOIN students s ON s.id = p.student_id
+    ${whereSql}
+    ORDER BY p.payment_date, p.id
+  `).all(params);
+
+  const totalCollected = rows.reduce((sum, r) => sum + r.amount, 0);
+  const byMethod = {};
+  const byProgram = {};
+  rows.forEach((r) => {
+    byMethod[r.method] = (byMethod[r.method] || 0) + r.amount;
+    const prog = r.program || 'Unspecified';
+    byProgram[prog] = (byProgram[prog] || 0) + r.amount;
+  });
+  const outstanding = db.prepare('SELECT COALESCE(SUM(balance_owing),0) AS total FROM students').get().total;
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', 'inline; filename="financial-report.pdf"');
+
+  const doc = newDocument({ title: 'Financial Report' });
+  doc.pipe(res);
+
+  const period = [from && `From ${from}`, to && `To ${to}`].filter(Boolean).join('   ') || 'All time';
+  doc.fontSize(10).fillColor('#444444').text(`Period: ${period}`);
+  doc.fillColor('#000000').moveDown();
+
+  doc.font('Helvetica-Bold').fontSize(13).text(`Total Collected: K${totalCollected.toLocaleString(undefined, { minimumFractionDigits: 2 })}`);
+  doc.font('Helvetica').fontSize(10).text(`(${rows.length} payment${rows.length === 1 ? '' : 's'})`);
+  doc.text(`Balance Outstanding Across All Students: K${outstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}`);
+  doc.moveDown();
+
+  doc.font('Helvetica-Bold').fontSize(11).text('By Payment Method');
+  doc.font('Helvetica').fontSize(10);
+  Object.entries(byMethod).sort((a, b) => b[1] - a[1]).forEach(([method, amt]) => {
+    doc.text(`${method}: K${amt.toLocaleString(undefined, { minimumFractionDigits: 2 })}`);
+  });
+  doc.moveDown();
+
+  doc.font('Helvetica-Bold').fontSize(11).text('By Programme');
+  doc.font('Helvetica').fontSize(10);
+  Object.entries(byProgram).sort((a, b) => b[1] - a[1]).forEach(([program, amt]) => {
+    doc.text(`${program}: K${amt.toLocaleString(undefined, { minimumFractionDigits: 2 })}`);
+  });
+  doc.moveDown();
+
+  if (rows.length > 0) {
+    doc.font('Helvetica-Bold').fontSize(11).text('Payment Detail');
+    doc.moveDown(0.3);
+    doc.fontSize(9);
+    rows.forEach((r) => {
+      if (doc.y > doc.page.height - 80) { doc.addPage(); doc.y = 60; }
+      const rowY = doc.y;
+      doc.font('Helvetica').text(r.payment_date, 50, rowY, { width: 70 });
+      doc.text(r.receipt_no, 125, rowY, { width: 110 });
+      doc.text(`${r.first_name} ${r.surname}`, 240, rowY, { width: 150 });
+      doc.text(r.method, 395, rowY, { width: 80 });
+      doc.text(`K${r.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 480, rowY, { width: 65, align: 'right' });
+      doc.moveDown(0.5);
+    });
+  }
+
+  footer(doc);
+  doc.end();
+});
+
+router.get('/:id/receipt', requireRole('Administrator', 'Accountant'), (req, res) => {
   const payment = db.prepare(`
     SELECT p.*, s.first_name, s.middle_name, s.surname, s.student_id AS student_number, s.program,
            s.total_fees, s.fees_paid, s.balance_owing
@@ -84,7 +192,7 @@ router.get('/:id/receipt', (req, res) => {
   res.json(payment);
 });
 
-router.get('/:id/receipt.pdf', (req, res) => {
+router.get('/:id/receipt.pdf', requireRole('Administrator', 'Accountant'), (req, res) => {
   const payment = db.prepare(`
     SELECT p.*, s.first_name, s.middle_name, s.surname, s.student_id AS student_number, s.program,
            s.total_fees, s.fees_paid, s.balance_owing

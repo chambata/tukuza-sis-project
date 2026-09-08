@@ -42,7 +42,7 @@ export default function Students() {
   }, [search, page, pageSize]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { api.get('/students/programs').then((res) => setPrograms(res.data)); }, []);
+  useEffect(() => { api.get('/programmes').then((res) => setPrograms(res.data)); }, []);
 
   function openAdd() {
     setEditingId(null);
@@ -192,8 +192,10 @@ export default function Students() {
                 onChange={(e) => setForm({ ...form, nrc_no: e.target.value })} />
             </Grid>
             <Grid item xs={6}>
-              <TextField label="Program" fullWidth value={form.program || ''}
-                onChange={(e) => setForm({ ...form, program: e.target.value })} />
+              <TextField select label="Programme" fullWidth value={form.program || ''}
+                onChange={(e) => setForm({ ...form, program: e.target.value })}>
+                {programs.map((p) => <MenuItem key={p.id} value={p.name}>{p.name}</MenuItem>)}
+              </TextField>
             </Grid>
             <Grid item xs={6}>
               <TextField label="Year of Graduation" fullWidth value={form.year_of_graduation || ''}

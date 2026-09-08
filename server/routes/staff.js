@@ -4,7 +4,7 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const { logAction } = require('../audit');
 
 const router = express.Router();
-router.use(requireAuth);
+router.use(requireAuth, requireRole('Administrator', 'Lecturer', 'Accountant'));
 
 router.get('/', (req, res) => {
   const { search = '', department = '' } = req.query;

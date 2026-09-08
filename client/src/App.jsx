@@ -11,23 +11,42 @@ import Finance from './pages/Finance.jsx';
 import Users from './pages/Users.jsx';
 import Backups from './pages/Backups.jsx';
 import AuditLog from './pages/AuditLog.jsx';
+import StudentPortal from './pages/StudentPortal.jsx';
+import Programmes from './pages/Programmes.jsx';
+import AcademicYears from './pages/AcademicYears.jsx';
+import { useAuth } from './AuthContext.jsx';
+import { Navigate } from 'react-router-dom';
+
+const STAFF_ROLES = ['Administrator', 'Lecturer', 'Accountant'];
+
+// Student accounts land on their own profile instead of the staff dashboard.
+function Home() {
+  const { user } = useAuth();
+  if (user?.role === 'Student') return <Navigate to="/me" replace />;
+  return (
+    <ProtectedRoute roles={STAFF_ROLES}>
+      <Layout><Dashboard /></Layout>
+    </ProtectedRoute>
+  );
+}
 
 export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/" element={<Home />} />
       <Route
-        path="/"
+        path="/me"
         element={
-          <ProtectedRoute>
-            <Layout><Dashboard /></Layout>
+          <ProtectedRoute roles={['Student']}>
+            <Layout><StudentPortal /></Layout>
           </ProtectedRoute>
         }
       />
       <Route
         path="/students"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute roles={STAFF_ROLES}>
             <Layout><Students /></Layout>
           </ProtectedRoute>
         }
@@ -35,7 +54,7 @@ export default function App() {
       <Route
         path="/students/:id"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute roles={STAFF_ROLES}>
             <Layout><StudentDetail /></Layout>
           </ProtectedRoute>
         }
@@ -43,7 +62,7 @@ export default function App() {
       <Route
         path="/staff"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute roles={STAFF_ROLES}>
             <Layout><Staff /></Layout>
           </ProtectedRoute>
         }
@@ -77,6 +96,22 @@ export default function App() {
         element={
           <ProtectedRoute roles={['Administrator']}>
             <Layout><AuditLog /></Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/programmes"
+        element={
+          <ProtectedRoute roles={['Administrator']}>
+            <Layout><Programmes /></Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/academic-years"
+        element={
+          <ProtectedRoute roles={['Administrator']}>
+            <Layout><AcademicYears /></Layout>
           </ProtectedRoute>
         }
       />

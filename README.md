@@ -10,22 +10,46 @@ legacy `SMS_FPC.xlsm` workbook (Student Details + Academic Staff Data sheets).
 ## What's included
 
 - **Authentication & roles**: Administrator, Lecturer, Accountant, Student (JWT-based login)
+- **Student self-service portal**: students log in with their **Student ID as
+  username**, and can view their own details, fees, CA marks, exam results (once
+  approved), GPA, and download their own fee statement / transcript — nothing
+  belonging to other students. An Administrator creates the login from that
+  student's profile page.
 - **Student records**: search, add/edit, per-student profile with payment history
+  (Administrator/Accountant/Lecturer)
 - **Academic staff records**: imported from the workbook, grouped by department
-- **Finance**: record fee payments, auto-generated receipt numbers, running balances
-- **Results**: per-student results entry (Administrator/Lecturer), viewable on the
-  student profile, plus an unofficial transcript PDF
+- **Programmes & Academic Years**: managed as real data (Administrator), not free
+  text — used as dropdowns when adding students and entering results
+- **Results with a CA/Exam split and approval workflow**: Lecturers enter
+  Continuous Assessment marks and Examination results and can edit them while in
+  Draft status; only an Administrator can approve a result (after which only an
+  Administrator can still edit it) or reverse an approval. GPA and the official
+  transcript are computed only from **approved** exam results.
+- **Finance**: record, edit, and delete fee payments (Administrator/Accountant,
+  balances always recalculated from the actual payment history rather than
+  incrementally), auto-generated receipt numbers, a date-range financial report
+  (by payment method and by programme)
 - **PDF documents**: printable payment receipts, student ID cards (with QR code),
-  per-student fee statements, academic transcripts, and a filterable students report
+  per-student fee statements, academic transcripts (with GPA), a filterable
+  students report, and a financial report
 - **Database backups**: on-demand backup, download, and delete from the Backups page
   (Administrator only), plus an automatic daily backup that runs while the app is open
 - **Audit log**: viewable in-app (Administrator only) — tracks create/update/delete/
-  login/print/download/backup actions
+  login/approve/print/download/backup actions
 - **Dashboard**: total students/staff, fees collected vs outstanding, students by
-  program, staff by department, recent payments
-- **User account management** (Administrator only)
+  program, staff by department, recent payments (Administrator/Lecturer/Accountant)
+- **User account management**: create staff accounts, reset passwords, assign a
+  Lecturer to a programme, activate/deactivate (Administrator only)
 - **Data import script** that loads `SMS_FPC.xlsm` into SQLite and can be re-run
   safely to refresh data
+
+### Access control notes
+
+Student accounts can only ever see their own record — they cannot list other
+students, browse finance/payments, view the staff directory, or query another
+student's results, even by guessing an ID directly against the API. This is
+enforced server-side (not just hidden in the UI) and is covered by a manual
+regression pass covering every sensitive endpoint.
 
 ## Not yet built (planned next sprints, per the project roadmap)
 

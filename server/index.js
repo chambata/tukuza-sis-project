@@ -17,6 +17,8 @@ app.use('/api/results', require('./routes/results'));
 app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/backups', require('./routes/backups'));
 app.use('/api/audit', require('./routes/audit'));
+app.use('/api/programmes', require('./routes/programmes'));
+app.use('/api/academic-years', require('./routes/academicYears'));
 
 app.use((err, req, res, next) => {
   console.error(err);

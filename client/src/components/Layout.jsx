@@ -12,15 +12,21 @@ import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import BackupIcon from '@mui/icons-material/Backup';
 import HistoryIcon from '@mui/icons-material/History';
 import LogoutIcon from '@mui/icons-material/Logout';
+import PersonIcon from '@mui/icons-material/Person';
 import { useAuth } from '../AuthContext.jsx';
+
+const STAFF_ROLES = ['Administrator', 'Lecturer', 'Accountant'];
 
 const DRAWER_WIDTH = 230;
 
 const NAV_ITEMS = [
-  { label: 'Dashboard', path: '/', icon: <DashboardIcon />, roles: null },
-  { label: 'Students', path: '/students', icon: <SchoolIcon />, roles: null },
-  { label: 'Academic Staff', path: '/staff', icon: <GroupIcon />, roles: null },
+  { label: 'My Profile', path: '/me', icon: <PersonIcon />, roles: ['Student'] },
+  { label: 'Dashboard', path: '/', icon: <DashboardIcon />, roles: STAFF_ROLES },
+  { label: 'Students', path: '/students', icon: <SchoolIcon />, roles: STAFF_ROLES },
+  { label: 'Academic Staff', path: '/staff', icon: <GroupIcon />, roles: STAFF_ROLES },
   { label: 'Finance', path: '/finance', icon: <PaymentsIcon />, roles: ['Administrator', 'Accountant'] },
+  { label: 'Programmes', path: '/programmes', icon: <SchoolIcon />, roles: ['Administrator'] },
+  { label: 'Academic Years', path: '/academic-years', icon: <HistoryIcon />, roles: ['Administrator'] },
   { label: 'User Accounts', path: '/users', icon: <AdminPanelSettingsIcon />, roles: ['Administrator'] },
   { label: 'Backups', path: '/backups', icon: <BackupIcon />, roles: ['Administrator'] },
   { label: 'Audit Log', path: '/audit', icon: <HistoryIcon />, roles: ['Administrator'] },
