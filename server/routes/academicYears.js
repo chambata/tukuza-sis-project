@@ -1,3 +1,4 @@
+const { SYSTEM_ADMIN_ROLES } = require('../lib/roles');
 const express = require('express');
 const db = require('../db');
 const { requireAuth, requireRole } = require('../middleware/auth');
@@ -10,7 +11,7 @@ router.get('/', (req, res) => {
   res.json(db.prepare('SELECT * FROM academic_years ORDER BY label DESC').all());
 });
 
-router.post('/', requireRole('Administrator'), (req, res) => {
+router.post('/', requireRole(...SYSTEM_ADMIN_ROLES), (req, res) => {
   const { label } = req.body || {};
   if (!label || !label.trim()) return res.status(400).json({ error: 'Academic year label is required' });
   try {
@@ -25,7 +26,7 @@ router.post('/', requireRole('Administrator'), (req, res) => {
   }
 });
 
-router.put('/:id/set-current', requireRole('Administrator'), (req, res) => {
+router.put('/:id/set-current', requireRole(...SYSTEM_ADMIN_ROLES), (req, res) => {
   const existing = db.prepare('SELECT * FROM academic_years WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Academic year not found' });
   const txn = db.transaction(() => {
@@ -37,7 +38,7 @@ router.put('/:id/set-current', requireRole('Administrator'), (req, res) => {
   res.json({ ok: true });
 });
 
-router.delete('/:id', requireRole('Administrator'), (req, res) => {
+router.delete('/:id', requireRole(...SYSTEM_ADMIN_ROLES), (req, res) => {
   const existing = db.prepare('SELECT * FROM academic_years WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Academic year not found' });
   const inUse = db.prepare('SELECT COUNT(*) AS c FROM results WHERE academic_year = ?').get(existing.label).c;

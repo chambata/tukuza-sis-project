@@ -1,3 +1,4 @@
+const { FINANCE_ROLES } = require('../lib/roles');
 const express = require('express');
 const db = require('../db');
 const { requireAuth, requireRole } = require('../middleware/auth');
@@ -27,7 +28,7 @@ function recalcStudentBalance(studentId) {
     .run(totalPaid, student.total_fees - totalPaid, studentId);
 }
 
-router.get('/', requireRole('Administrator', 'Accountant'), (req, res) => {
+router.get('/', requireRole(...FINANCE_ROLES), (req, res) => {
   const { studentId } = req.query;
   if (studentId) {
     return res.json(db.prepare('SELECT * FROM payments WHERE student_id = ? ORDER BY payment_date DESC, id DESC').all(studentId));
@@ -47,7 +48,7 @@ router.get('/', requireRole('Administrator', 'Accountant'), (req, res) => {
   res.json(rows);
 });
 
-router.post('/', requireRole('Administrator', 'Accountant'), (req, res) => {
+router.post('/', requireRole(...FINANCE_ROLES), (req, res) => {
   const { student_id, amount, method, notes, payment_date } = req.body || {};
   const amt = Number(amount);
   if (!student_id || !amt || amt <= 0) {
@@ -78,7 +79,7 @@ router.post('/', requireRole('Administrator', 'Accountant'), (req, res) => {
   res.status(201).json({ id, receipt_no: receiptNo });
 });
 
-router.put('/:id', requireRole('Administrator', 'Accountant'), (req, res) => {
+router.put('/:id', requireRole(...FINANCE_ROLES), (req, res) => {
   const existing = db.prepare('SELECT * FROM payments WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Payment not found' });
   const { amount, method, notes, payment_date } = req.body || {};
@@ -96,7 +97,7 @@ router.put('/:id', requireRole('Administrator', 'Accountant'), (req, res) => {
   res.json({ ok: true });
 });
 
-router.delete('/:id', requireRole('Administrator', 'Accountant'), (req, res) => {
+router.delete('/:id', requireRole(...FINANCE_ROLES), (req, res) => {
   const existing = db.prepare('SELECT * FROM payments WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Payment not found' });
   const txn = db.transaction(() => {
@@ -108,7 +109,7 @@ router.delete('/:id', requireRole('Administrator', 'Accountant'), (req, res) => 
   res.json({ ok: true });
 });
 
-router.get('/report.pdf', requireRole('Administrator', 'Accountant'), (req, res) => {
+router.get('/report.pdf', requireRole(...FINANCE_ROLES), (req, res) => {
   const { from, to } = req.query;
   const where = [];
   const params = {};
@@ -182,7 +183,7 @@ router.get('/report.pdf', requireRole('Administrator', 'Accountant'), (req, res)
   doc.end();
 });
 
-router.get('/:id/receipt', requireRole('Administrator', 'Accountant'), (req, res) => {
+router.get('/:id/receipt', requireRole(...FINANCE_ROLES), (req, res) => {
   const payment = db.prepare(`
     SELECT p.*, s.first_name, s.middle_name, s.surname, s.student_id AS student_number, s.program,
            s.total_fees, s.fees_paid, s.balance_owing
@@ -192,7 +193,7 @@ router.get('/:id/receipt', requireRole('Administrator', 'Accountant'), (req, res
   res.json(payment);
 });
 
-router.get('/:id/receipt.pdf', requireRole('Administrator', 'Accountant'), (req, res) => {
+router.get('/:id/receipt.pdf', requireRole(...FINANCE_ROLES), (req, res) => {
   const payment = db.prepare(`
     SELECT p.*, s.first_name, s.middle_name, s.surname, s.student_id AS student_number, s.program,
            s.total_fees, s.fees_paid, s.balance_owing

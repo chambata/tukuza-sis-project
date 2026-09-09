@@ -5,20 +5,40 @@ CREATE TABLE IF NOT EXISTS users (
   username TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
   full_name TEXT,
-  role TEXT NOT NULL CHECK (role IN ('Administrator','Lecturer','Accountant','Student')),
+  role TEXT NOT NULL CHECK (role IN ('Super Administrator','Administrator','Registrar','Accountant','Lecturer','Examinations Officer','Student')),
   linked_student_id INTEGER REFERENCES students(id),
   assigned_program TEXT,
   is_active INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS departments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT UNIQUE NOT NULL,
+  code TEXT,
+  head_of_department TEXT,
+  description TEXT
+);
+
 CREATE TABLE IF NOT EXISTS programmes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT UNIQUE NOT NULL,
+  code TEXT,
+  department_id INTEGER REFERENCES departments(id),
+  duration_years REAL,
+  description TEXT,
+  is_active INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS academic_years (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  label TEXT UNIQUE NOT NULL,
+  is_current INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS intakes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   label TEXT UNIQUE NOT NULL,
   is_current INTEGER NOT NULL DEFAULT 0,
@@ -30,11 +50,6 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT
 );
 
-CREATE TABLE IF NOT EXISTS departments (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  name TEXT UNIQUE NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS students (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   sn INTEGER,
@@ -42,6 +57,12 @@ CREATE TABLE IF NOT EXISTS students (
   middle_name TEXT,
   surname TEXT NOT NULL,
   gender TEXT,
+  date_of_birth TEXT,
+  nationality TEXT,
+  phone_number TEXT,
+  email TEXT,
+  residential_address TEXT,
+  passport_photo TEXT,
   student_id TEXT UNIQUE NOT NULL,
   nrc_no TEXT,
   total_fees REAL NOT NULL DEFAULT 0,
@@ -49,7 +70,12 @@ CREATE TABLE IF NOT EXISTS students (
   balance_owing REAL NOT NULL DEFAULT 0,
   year_of_graduation TEXT,
   program TEXT,
-  status TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active','Graduated','Deferred','Withdrawn')),
+  department_id INTEGER REFERENCES departments(id),
+  intake_id INTEGER REFERENCES intakes(id),
+  academic_year TEXT,
+  year_of_study INTEGER,
+  semester TEXT,
+  status TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active','Graduated','Deferred','Withdrawn','Suspended','Completed')),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -72,6 +98,8 @@ CREATE TABLE IF NOT EXISTS staff (
   postal_address TEXT,
   disability TEXT,
   academic_rank TEXT,
+  position TEXT,
+  date_employed TEXT,
   highest_level_of_study TEXT,
   field_of_study TEXT,
   mode_of_employment TEXT,
@@ -86,7 +114,8 @@ CREATE TABLE IF NOT EXISTS payments (
   receipt_no TEXT UNIQUE NOT NULL,
   amount REAL NOT NULL,
   payment_date TEXT NOT NULL DEFAULT (date('now')),
-  method TEXT NOT NULL DEFAULT 'Cash' CHECK (method IN ('Cash','Bank Transfer','Mobile Money','Cheque','Card')),
+  method TEXT NOT NULL DEFAULT 'Cash' CHECK (method IN ('Cash','Bank Transfer','Mobile Money','Cheque','Card','EFT','Other')),
+  reference_no TEXT,
   received_by TEXT,
   notes TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -123,3 +152,7 @@ CREATE INDEX IF NOT EXISTS idx_students_program ON students(program);
 CREATE INDEX IF NOT EXISTS idx_students_surname ON students(surname);
 CREATE INDEX IF NOT EXISTS idx_payments_student ON payments(student_id);
 CREATE INDEX IF NOT EXISTS idx_staff_department ON staff(department_id);
+-- Note: indexes on columns added by a later migration (students.department_id,
+-- students.intake_id, programmes.department_id) are created in db.js *after*
+-- those migrations run, not here — this file also runs unconditionally
+-- against pre-migration databases, where those columns don't exist yet.

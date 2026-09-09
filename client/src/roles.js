@@ -1,0 +1,17 @@
+export const SUPER_ADMIN = 'Super Administrator';
+export const ADMINISTRATOR = 'Administrator';
+export const REGISTRAR = 'Registrar';
+export const ACCOUNTANT = 'Accountant';
+export const LECTURER = 'Lecturer';
+export const EXAMS_OFFICER = 'Examinations Officer';
+export const STUDENT = 'Student';
+
+export const STAFF_ROLES = [SUPER_ADMIN, ADMINISTRATOR, REGISTRAR, ACCOUNTANT, LECTURER, EXAMS_OFFICER];
+export const STUDENT_WRITE_ROLES = [SUPER_ADMIN, ADMINISTRATOR, REGISTRAR];
+export const PROGRAMME_WRITE_ROLES = [SUPER_ADMIN, ADMINISTRATOR, REGISTRAR];
+export const INTAKE_WRITE_ROLES = [SUPER_ADMIN, REGISTRAR];
+export const DEPARTMENT_WRITE_ROLES = [SUPER_ADMIN, ADMINISTRATOR];
+export const FINANCE_ROLES = [SUPER_ADMIN, ACCOUNTANT];
+export const RESULTS_ENTRY_ROLES = [SUPER_ADMIN, ADMINISTRATOR, LECTURER];
+export const RESULTS_APPROVAL_ROLES = [SUPER_ADMIN, EXAMS_OFFICER];
+export const SYSTEM_ADMIN_ROLES = [SUPER_ADMIN];

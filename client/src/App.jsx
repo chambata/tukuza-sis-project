@@ -1,5 +1,5 @@
 import React from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import Login from './pages/Login.jsx';
@@ -14,15 +14,18 @@ import AuditLog from './pages/AuditLog.jsx';
 import StudentPortal from './pages/StudentPortal.jsx';
 import Programmes from './pages/Programmes.jsx';
 import AcademicYears from './pages/AcademicYears.jsx';
+import Departments from './pages/Departments.jsx';
+import Intakes from './pages/Intakes.jsx';
 import { useAuth } from './AuthContext.jsx';
-import { Navigate } from 'react-router-dom';
-
-const STAFF_ROLES = ['Administrator', 'Lecturer', 'Accountant'];
+import {
+  STAFF_ROLES, STUDENT, FINANCE_ROLES, PROGRAMME_WRITE_ROLES, INTAKE_WRITE_ROLES,
+  DEPARTMENT_WRITE_ROLES, SYSTEM_ADMIN_ROLES,
+} from './roles.js';
 
 // Student accounts land on their own profile instead of the staff dashboard.
 function Home() {
   const { user } = useAuth();
-  if (user?.role === 'Student') return <Navigate to="/me" replace />;
+  if (user?.role === STUDENT) return <Navigate to="/me" replace />;
   return (
     <ProtectedRoute roles={STAFF_ROLES}>
       <Layout><Dashboard /></Layout>
@@ -38,7 +41,7 @@ export default function App() {
       <Route
         path="/me"
         element={
-          <ProtectedRoute roles={['Student']}>
+          <ProtectedRoute roles={[STUDENT]}>
             <Layout><StudentPortal /></Layout>
           </ProtectedRoute>
         }
@@ -70,7 +73,7 @@ export default function App() {
       <Route
         path="/finance"
         element={
-          <ProtectedRoute roles={['Administrator', 'Accountant']}>
+          <ProtectedRoute roles={FINANCE_ROLES}>
             <Layout><Finance /></Layout>
           </ProtectedRoute>
         }
@@ -78,7 +81,7 @@ export default function App() {
       <Route
         path="/users"
         element={
-          <ProtectedRoute roles={['Administrator']}>
+          <ProtectedRoute roles={SYSTEM_ADMIN_ROLES}>
             <Layout><Users /></Layout>
           </ProtectedRoute>
         }
@@ -86,7 +89,7 @@ export default function App() {
       <Route
         path="/backups"
         element={
-          <ProtectedRoute roles={['Administrator']}>
+          <ProtectedRoute roles={SYSTEM_ADMIN_ROLES}>
             <Layout><Backups /></Layout>
           </ProtectedRoute>
         }
@@ -94,7 +97,7 @@ export default function App() {
       <Route
         path="/audit"
         element={
-          <ProtectedRoute roles={['Administrator']}>
+          <ProtectedRoute roles={SYSTEM_ADMIN_ROLES}>
             <Layout><AuditLog /></Layout>
           </ProtectedRoute>
         }
@@ -102,15 +105,31 @@ export default function App() {
       <Route
         path="/programmes"
         element={
-          <ProtectedRoute roles={['Administrator']}>
+          <ProtectedRoute roles={PROGRAMME_WRITE_ROLES}>
             <Layout><Programmes /></Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/departments"
+        element={
+          <ProtectedRoute roles={DEPARTMENT_WRITE_ROLES}>
+            <Layout><Departments /></Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/intakes"
+        element={
+          <ProtectedRoute roles={INTAKE_WRITE_ROLES}>
+            <Layout><Intakes /></Layout>
           </ProtectedRoute>
         }
       />
       <Route
         path="/academic-years"
         element={
-          <ProtectedRoute roles={['Administrator']}>
+          <ProtectedRoute roles={SYSTEM_ADMIN_ROLES}>
             <Layout><AcademicYears /></Layout>
           </ProtectedRoute>
         }

@@ -2,9 +2,10 @@ const express = require('express');
 const db = require('../db');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { logAction } = require('../audit');
+const { STAFF_ROLES, DEPARTMENT_WRITE_ROLES } = require('../lib/roles');
 
 const router = express.Router();
-router.use(requireAuth, requireRole('Administrator', 'Lecturer', 'Accountant'));
+router.use(requireAuth, requireRole(...STAFF_ROLES));
 
 router.get('/', (req, res) => {
   const { search = '', department = '' } = req.query;
@@ -41,7 +42,7 @@ router.get('/:id', (req, res) => {
   res.json(row);
 });
 
-router.post('/', requireRole('Administrator'), (req, res) => {
+router.post('/', requireRole(...DEPARTMENT_WRITE_ROLES), (req, res) => {
   const b = req.body || {};
   if (!b.first_name || !b.last_name) {
     return res.status(400).json({ error: 'first_name and last_name are required' });
@@ -54,10 +55,10 @@ router.post('/', requireRole('Administrator'), (req, res) => {
   const info = db.prepare(`
     INSERT INTO staff (title, first_name, last_name, middle_name, gender, dob, age, nrc_number,
       passport_no, nationality, email, phone_number, postal_address, disability, academic_rank,
-      highest_level_of_study, field_of_study, mode_of_employment, department_id)
+      position, date_employed, highest_level_of_study, field_of_study, mode_of_employment, department_id)
     VALUES (@title, @first_name, @last_name, @middle_name, @gender, @dob, @age, @nrc_number,
       @passport_no, @nationality, @email, @phone_number, @postal_address, @disability, @academic_rank,
-      @highest_level_of_study, @field_of_study, @mode_of_employment, @department_id)
+      @position, @date_employed, @highest_level_of_study, @field_of_study, @mode_of_employment, @department_id)
   `).run({
     title: b.title || null,
     first_name: b.first_name,
@@ -74,6 +75,8 @@ router.post('/', requireRole('Administrator'), (req, res) => {
     postal_address: b.postal_address || null,
     disability: b.disability || null,
     academic_rank: b.academic_rank || null,
+    position: b.position || null,
+    date_employed: b.date_employed || null,
     highest_level_of_study: b.highest_level_of_study || null,
     field_of_study: b.field_of_study || null,
     mode_of_employment: b.mode_of_employment || null,
@@ -83,7 +86,7 @@ router.post('/', requireRole('Administrator'), (req, res) => {
   res.status(201).json({ id: info.lastInsertRowid });
 });
 
-router.put('/:id', requireRole('Administrator'), (req, res) => {
+router.put('/:id', requireRole(...DEPARTMENT_WRITE_ROLES), (req, res) => {
   const existing = db.prepare('SELECT * FROM staff WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Staff member not found' });
   const b = { ...existing, ...req.body, id: req.params.id };
@@ -92,6 +95,7 @@ router.put('/:id', requireRole('Administrator'), (req, res) => {
       middle_name=@middle_name, gender=@gender, dob=@dob, age=@age, nrc_number=@nrc_number,
       passport_no=@passport_no, nationality=@nationality, email=@email, phone_number=@phone_number,
       postal_address=@postal_address, disability=@disability, academic_rank=@academic_rank,
+      position=@position, date_employed=@date_employed,
       highest_level_of_study=@highest_level_of_study, field_of_study=@field_of_study,
       mode_of_employment=@mode_of_employment, department_id=@department_id, updated_at=datetime('now')
     WHERE id=@id
@@ -100,7 +104,7 @@ router.put('/:id', requireRole('Administrator'), (req, res) => {
   res.json({ ok: true });
 });
 
-router.delete('/:id', requireRole('Administrator'), (req, res) => {
+router.delete('/:id', requireRole(...DEPARTMENT_WRITE_ROLES), (req, res) => {
   const existing = db.prepare('SELECT * FROM staff WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Staff member not found' });
   db.prepare('DELETE FROM staff WHERE id = ?').run(req.params.id);

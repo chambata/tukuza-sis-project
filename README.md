@@ -9,58 +9,91 @@ legacy `SMS_FPC.xlsm` workbook (Student Details + Academic Staff Data sheets).
 
 ## What's included
 
-- **Authentication & roles**: Administrator, Lecturer, Accountant, Student (JWT-based login)
+- **Seven roles with distinct permissions** (JWT-based login): **Super Administrator**
+  (everything — users, backups, audit log, academic years, system-wide overrides),
+  **Administrator** (students, staff, programmes, departments, reports),
+  **Registrar** (register/edit students, manage programmes & intakes),
+  **Accountant** (all finance — payments, receipts, financial reports),
+  **Lecturer** (enter CA marks & exam results while in Draft),
+  **Examinations Officer** (approve/lock results, generate transcripts), and
+  **Student** (self-service portal only, scoped to their own record).
 - **Student self-service portal**: students log in with their **Student ID as
   username**, and can view their own details, fees, CA marks, exam results (once
   approved), GPA, and download their own fee statement / transcript — nothing
-  belonging to other students. An Administrator creates the login from that
-  student's profile page.
-- **Student records**: search, add/edit, per-student profile with payment history
-  (Administrator/Accountant/Lecturer)
-- **Academic staff records**: imported from the workbook, grouped by department
-- **Programmes & Academic Years**: managed as real data (Administrator), not free
-  text — used as dropdowns when adding students and entering results
+  belonging to other students. An Administrator or Super Administrator creates
+  the login from that student's profile page.
+- **Student records**: full demographic + academic profile (DOB, nationality,
+  contact details, passport photo, department, intake, academic year, year of
+  study, semester, six status values), search, add/edit, per-student profile
+  with payment history. Student IDs can be entered manually (matching your
+  existing scheme) or auto-generated as `TUK/2026/001`. Duplicate NRC/email are
+  rejected at the application level.
+- **Academic staff records**: imported from the workbook, grouped by department,
+  with position and date-employed fields
+- **Programmes, Departments & Intakes**: all managed as real data with proper
+  fields (code, duration, description, head of department, etc.) instead of free
+  text — used as dropdowns throughout the app
 - **Results with a CA/Exam split and approval workflow**: Lecturers enter
   Continuous Assessment marks and Examination results and can edit them while in
-  Draft status; only an Administrator can approve a result (after which only an
-  Administrator can still edit it) or reverse an approval. GPA and the official
-  transcript are computed only from **approved** exam results.
-- **Finance**: record, edit, and delete fee payments (Administrator/Accountant,
+  Draft status; only an Examinations Officer or Super Administrator can approve
+  a result (after which it's locked to further Lecturer edits) or reverse an
+  approval. GPA and the official transcript are computed only from **approved**
+  exam results.
+- **Finance**: record, edit, and delete fee payments (Super Administrator/Accountant,
   balances always recalculated from the actual payment history rather than
   incrementally), auto-generated receipt numbers, a date-range financial report
   (by payment method and by programme)
-- **PDF documents**: printable payment receipts, student ID cards (with QR code),
-  per-student fee statements, academic transcripts (with GPA), a filterable
-  students report, and a financial report
+- **PDF documents**: printable payment receipts, front-and-back student ID cards
+  (with photo + QR code), per-student fee statements, academic transcripts (with
+  GPA), a filterable students report, and a financial report
 - **Database backups**: on-demand backup, download, and delete from the Backups page
-  (Administrator only), plus an automatic daily backup that runs while the app is open
-- **Audit log**: viewable in-app (Administrator only) — tracks create/update/delete/
-  login/approve/print/download/backup actions
+  (Super Administrator only), an automatic daily backup while the app is open, and
+  an optional offsite/cloud mirror (any local folder, including one synced by
+  OneDrive/Google Drive/Dropbox) via a native OS folder picker
+- **Audit log**: viewable in-app (Super Administrator only) — tracks create/update/
+  delete/login/approve/print/download/backup actions
 - **Dashboard**: total students/staff, fees collected vs outstanding, students by
-  program, staff by department, recent payments (Administrator/Lecturer/Accountant)
+  program, staff by department, recent payments (all staff roles)
 - **User account management**: create staff accounts, reset passwords, assign a
-  Lecturer to a programme, activate/deactivate (Administrator only)
+  Lecturer to a programme, activate/deactivate (Super Administrator only)
 - **Data import script** that loads `SMS_FPC.xlsm` into SQLite and can be re-run
   safely to refresh data
-- **Offsite/cloud backup mirror**: point the Backups page at any local folder —
-  including one synced by OneDrive, Google Drive, Dropbox, etc. — and every backup
-  (manual or automatic) is copied there too, via a native OS folder picker
 
 ### Access control notes
 
 Student accounts can only ever see their own record — they cannot list other
 students, browse finance/payments, view the staff directory, or query another
-student's results, even by guessing an ID directly against the API. This is
-enforced server-side (not just hidden in the UI) and is covered by a manual
-regression pass covering every sensitive endpoint.
+student's results, even by guessing an ID directly against the API. Every one
+of the 7 roles' permissions above is enforced server-side (not just hidden in
+the UI) and was verified with a dedicated test account per role, not just the
+built-in admin.
+
+### Upgrading an existing installation
+
+If you're upgrading from an earlier build, the database migration runs
+automatically the first time you launch the new version — no manual steps
+needed. Two things to know:
+
+- Your existing `Administrator` account is automatically upgraded to
+  **Super Administrator** (the new full-access role) so you don't lose any
+  access — the new, narrower `Administrator` role only applies to accounts you
+  create from now on.
+- The migration was tested against a full copy of real production data
+  (492 students) before being shipped, including foreign-key integrity checks
+  and functional insert/update tests — not just "it didn't crash."
 
 ## Not yet built (planned next sprints, per the project roadmap)
 
-SMS/email integration (would need a provider account — Twilio, an SMTP relay,
-etc. — that this project doesn't have credentials for). A Windows installer
-**has** been built and tested (see below) but only by running the installer's
-contents programmatically — it has not been run through an actual Windows
-install wizard by a human yet, so treat the first real install as a test.
+Course catalog & student course registration, itemized CA components
+(assignment/test/quiz/practical auto-summed), a configurable grading scale,
+the full Draft→Submitted→Approved→Published→Locked results workflow (currently
+just Draft→Approved), notifications/announcements, in-app Excel import/export,
+restore-from-backup, and a system settings page. SMS/email integration would
+also need a provider account (Twilio, an SMTP relay, etc.) this project doesn't
+have credentials for. A Windows installer **has** been built and tested (see
+below) but only by running the installer's contents programmatically — it has
+not been run through an actual Windows install wizard by a human yet, so treat
+the first real install as a test.
 
 ## Project structure
 

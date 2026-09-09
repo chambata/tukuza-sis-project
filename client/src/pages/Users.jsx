@@ -6,12 +6,13 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import LockResetIcon from '@mui/icons-material/LockReset';
 import api from '../api';
+import { STAFF_ROLES, LECTURER } from '../roles.js';
 
 export default function Users() {
   const [rows, setRows] = useState([]);
   const [programmes, setProgrammes] = useState([]);
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ username: '', password: '', full_name: '', role: 'Lecturer' });
+  const [form, setForm] = useState({ username: '', password: '', full_name: '', role: LECTURER });
   const [error, setError] = useState('');
 
   const [resetOpen, setResetOpen] = useState(null); // holds the user row being reset
@@ -30,7 +31,7 @@ export default function Users() {
     try {
       await api.post('/users', form);
       setOpen(false);
-      setForm({ username: '', password: '', full_name: '', role: 'Lecturer' });
+      setForm({ username: '', password: '', full_name: '', role: LECTURER });
       load();
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to create user');
@@ -83,7 +84,7 @@ export default function Users() {
                 <TableCell>{u.full_name || '—'}</TableCell>
                 <TableCell><Chip size="small" label={u.role} /></TableCell>
                 <TableCell>
-                  {u.role === 'Lecturer' ? (
+                  {u.role === LECTURER ? (
                     <TextField
                       select size="small" value={u.assigned_program || ''} sx={{ minWidth: 200 }}
                       onChange={(e) => assignProgram(u, e.target.value)}
@@ -123,7 +124,7 @@ export default function Users() {
             onChange={(e) => setForm({ ...form, password: e.target.value })} />
           <TextField select label="Role" fullWidth sx={{ mt: 2 }} value={form.role}
             onChange={(e) => setForm({ ...form, role: e.target.value })}>
-            {['Administrator', 'Lecturer', 'Accountant'].map((r) => (
+            {STAFF_ROLES.map((r) => (
               <MenuItem key={r} value={r}>{r}</MenuItem>
             ))}
           </TextField>

@@ -1,3 +1,4 @@
+const { SYSTEM_ADMIN_ROLES, STAFF_ROLES, LECTURER } = require('../lib/roles');
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
@@ -5,7 +6,7 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const { logAction } = require('../audit');
 
 const router = express.Router();
-router.use(requireAuth, requireRole('Administrator'));
+router.use(requireAuth, requireRole(...SYSTEM_ADMIN_ROLES));
 
 router.get('/', (req, res) => {
   const users = db.prepare(
@@ -16,7 +17,9 @@ router.get('/', (req, res) => {
 
 router.post('/', (req, res) => {
   const { username, password, full_name, role } = req.body || {};
-  const validRoles = ['Administrator', 'Lecturer', 'Accountant', 'Student'];
+  // Student accounts are created from a student's own profile (they must be
+  // linked to a student record), not through this general-purpose endpoint.
+  const validRoles = STAFF_ROLES;
   if (!username || !password || !role || !validRoles.includes(role)) {
     return res.status(400).json({ error: 'username, password and a valid role are required' });
   }
@@ -58,7 +61,7 @@ router.put('/:id/assign-program', (req, res) => {
   const { program } = req.body || {};
   const existing = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'User not found' });
-  if (existing.role !== 'Lecturer') {
+  if (existing.role !== LECTURER) {
     return res.status(400).json({ error: 'Only Lecturer accounts can be assigned a programme' });
   }
   db.prepare('UPDATE users SET assigned_program = ? WHERE id = ?').run(program || null, req.params.id);

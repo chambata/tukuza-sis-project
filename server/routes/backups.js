@@ -1,3 +1,4 @@
+const { SYSTEM_ADMIN_ROLES } = require('../lib/roles');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
@@ -6,7 +7,7 @@ const { logAction } = require('../audit');
 const { BACKUP_DIR, listBackups, runBackup, getSecondaryFolder, setSecondaryFolder, mirrorAllToSecondary } = require('../lib/backup');
 
 const router = express.Router();
-router.use(requireAuth, requireRole('Administrator'));
+router.use(requireAuth, requireRole(...SYSTEM_ADMIN_ROLES));
 
 router.get('/', (req, res) => {
   res.json(listBackups());

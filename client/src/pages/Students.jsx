@@ -12,6 +12,7 @@ import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import api from '../api';
 import { openPdf } from '../pdf';
 import { useAuth } from '../AuthContext.jsx';
+import { STUDENT_WRITE_ROLES } from '../roles.js';
 
 const emptyForm = {
   first_name: '', middle_name: '', surname: '', gender: '', student_id: '', nrc_no: '',
@@ -22,7 +23,7 @@ const money = (n) => `K${Number(n || 0).toLocaleString(undefined, { minimumFract
 
 export default function Students() {
   const { user } = useAuth();
-  const canWrite = ['Administrator', 'Accountant'].includes(user?.role);
+  const canWrite = STUDENT_WRITE_ROLES.includes(user?.role);
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState('');
@@ -212,7 +213,7 @@ export default function Students() {
             <Grid item xs={6}>
               <TextField select label="Status" fullWidth value={form.status || 'Active'}
                 onChange={(e) => setForm({ ...form, status: e.target.value })}>
-                {['Active', 'Graduated', 'Deferred', 'Withdrawn'].map((s) => (
+                {['Active', 'Graduated', 'Deferred', 'Withdrawn', 'Suspended', 'Completed'].map((s) => (
                   <MenuItem key={s} value={s}>{s}</MenuItem>
                 ))}
               </TextField>

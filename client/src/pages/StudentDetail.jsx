@@ -18,6 +18,7 @@ import LoginIcon from '@mui/icons-material/Login';
 import { useAuth } from '../AuthContext.jsx';
 import api from '../api';
 import { openPdf } from '../pdf';
+import { FINANCE_ROLES, RESULTS_ENTRY_ROLES, RESULTS_APPROVAL_ROLES, SUPER_ADMIN, ADMINISTRATOR } from '../roles.js';
 
 const money = (n) => `K${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
 const emptyResultForm = { course_name: '', type: 'Exam', academic_year: '', semester: '', score: '', grade: '' };
@@ -25,9 +26,10 @@ const emptyResultForm = { course_name: '', type: 'Exam', academic_year: '', seme
 export default function StudentDetail() {
   const { id } = useParams();
   const { user } = useAuth();
-  const isAdmin = user?.role === 'Administrator';
-  const canRecordPayment = ['Administrator', 'Accountant'].includes(user?.role);
-  const canEnterResults = ['Administrator', 'Lecturer'].includes(user?.role);
+  const canCreateLogin = [SUPER_ADMIN, ADMINISTRATOR].includes(user?.role);
+  const canApproveResults = RESULTS_APPROVAL_ROLES.includes(user?.role);
+  const canRecordPayment = FINANCE_ROLES.includes(user?.role);
+  const canEnterResults = RESULTS_ENTRY_ROLES.includes(user?.role);
 
   const [student, setStudent] = useState(null);
   const [academicYears, setAcademicYears] = useState([]);
@@ -185,7 +187,7 @@ export default function StudentDetail() {
         >
           Transcript
         </Button>
-        {isAdmin && !student.loginAccount && (
+        {canCreateLogin && !student.loginAccount && (
           <Button
             variant="outlined" size="small" startIcon={<LoginIcon />}
             onClick={() => { setLoginOpen(true); setLoginPassword(''); setLoginError(''); setLoginCreated(null); }}
@@ -193,7 +195,7 @@ export default function StudentDetail() {
             Create Student Login
           </Button>
         )}
-        {isAdmin && student.loginAccount && (
+        {canCreateLogin && student.loginAccount && (
           <Chip
             icon={<LoginIcon />}
             label={`Login: ${student.loginAccount.username} (${student.loginAccount.is_active ? 'Active' : 'Disabled'})`}
@@ -310,7 +312,7 @@ export default function StudentDetail() {
             </TableHead>
             <TableBody>
               {student.results.map((r) => {
-                const locked = r.status === 'Approved' && !isAdmin;
+                const locked = r.status === 'Approved' && !canApproveResults;
                 return (
                   <TableRow key={r.id}>
                     <TableCell>{r.course_name}</TableCell>
@@ -327,7 +329,7 @@ export default function StudentDetail() {
                       />
                     </TableCell>
                     <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
-                      {isAdmin && (r.status === 'Approved' ? (
+                      {canApproveResults && (r.status === 'Approved' ? (
                         <IconButton size="small" title="Unapprove" onClick={() => unapproveResult(r.id)}>
                           <UndoIcon fontSize="small" />
                         </IconButton>
