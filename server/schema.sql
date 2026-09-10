@@ -121,19 +121,70 @@ CREATE TABLE IF NOT EXISTS payments (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS courses (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  course_code TEXT UNIQUE NOT NULL,
+  course_name TEXT NOT NULL,
+  programme_id INTEGER REFERENCES programmes(id),
+  year_of_study INTEGER,
+  semester TEXT,
+  credit_hours REAL,
+  lecturer_user_id INTEGER REFERENCES users(id),
+  status TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active','Inactive')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS student_courses (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  course_id INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  academic_year TEXT,
+  semester TEXT,
+  registered_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(student_id, course_id, academic_year, semester)
+);
+
+CREATE TABLE IF NOT EXISTS grade_scales (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  min_score REAL NOT NULL,
+  max_score REAL NOT NULL,
+  grade TEXT NOT NULL,
+  remark TEXT,
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS results (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  course_id INTEGER REFERENCES courses(id),
   course_name TEXT NOT NULL,
-  type TEXT NOT NULL DEFAULT 'Exam' CHECK (type IN ('CA','Exam')),
   academic_year TEXT,
   semester TEXT,
-  score REAL,
+  ca_total REAL NOT NULL DEFAULT 0,
+  exam_score REAL,
+  final_mark REAL,
   grade TEXT,
-  status TEXT NOT NULL DEFAULT 'Draft' CHECK (status IN ('Draft','Approved')),
+  remark TEXT,
+  status TEXT NOT NULL DEFAULT 'Draft' CHECK (status IN ('Draft','Submitted','Approved','Published','Locked')),
   entered_by TEXT,
+  submitted_by TEXT,
+  submitted_at TEXT,
   approved_by TEXT,
   approved_at TEXT,
+  published_by TEXT,
+  published_at TEXT,
+  locked_by TEXT,
+  locked_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS assessment_components (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  result_id INTEGER NOT NULL REFERENCES results(id) ON DELETE CASCADE,
+  component_name TEXT NOT NULL,
+  score REAL NOT NULL DEFAULT 0,
+  max_score REAL NOT NULL DEFAULT 100,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -152,6 +203,11 @@ CREATE INDEX IF NOT EXISTS idx_students_program ON students(program);
 CREATE INDEX IF NOT EXISTS idx_students_surname ON students(surname);
 CREATE INDEX IF NOT EXISTS idx_payments_student ON payments(student_id);
 CREATE INDEX IF NOT EXISTS idx_staff_department ON staff(department_id);
+CREATE INDEX IF NOT EXISTS idx_results_student ON results(student_id);
+CREATE INDEX IF NOT EXISTS idx_assessment_components_result ON assessment_components(result_id);
+CREATE INDEX IF NOT EXISTS idx_student_courses_student ON student_courses(student_id);
+CREATE INDEX IF NOT EXISTS idx_student_courses_course ON student_courses(course_id);
+CREATE INDEX IF NOT EXISTS idx_courses_programme ON courses(programme_id);
 -- Note: indexes on columns added by a later migration (students.department_id,
 -- students.intake_id, programmes.department_id) are created in db.js *after*
 -- those migrations run, not here — this file also runs unconditionally

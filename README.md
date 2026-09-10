@@ -33,12 +33,19 @@ legacy `SMS_FPC.xlsm` workbook (Student Details + Academic Staff Data sheets).
 - **Programmes, Departments & Intakes**: all managed as real data with proper
   fields (code, duration, description, head of department, etc.) instead of free
   text — used as dropdowns throughout the app
-- **Results with a CA/Exam split and approval workflow**: Lecturers enter
-  Continuous Assessment marks and Examination results and can edit them while in
-  Draft status; only an Examinations Officer or Super Administrator can approve
-  a result (after which it's locked to further Lecturer edits) or reverse an
-  approval. GPA and the official transcript are computed only from **approved**
-  exam results.
+- **Course catalog & student registration**: courses (code, name, programme,
+  year, semester, credit hours, assigned lecturer), with students registered
+  per academic year/semester
+- **Results with itemized CA components and a configurable grade scale**:
+  Lecturers add any number of named CA components (Assignment, Test, Quiz,
+  Practical, ...) — the CA Total, Final Mark (CA + Exam), and Grade/Remark are
+  all computed automatically against an editable mark-band table (defaults to
+  Distinction/Merit/Credit/Pass/Fail). A real 5-stage workflow —
+  **Draft → Submitted → Approved → Published → Locked** — gates who can do
+  what at each stage: Lecturers enter and submit; an Examinations Officer
+  approves, publishes, and locks; a Super Administrator can revert a stage for
+  correction. Students only ever see **Published**/**Locked** results, and GPA
+  and the official transcript are computed only from those.
 - **Finance**: record, edit, and delete fee payments (Super Administrator/Accountant,
   balances always recalculated from the actual payment history rather than
   incrementally), auto-generated receipt numbers, a date-range financial report
@@ -66,34 +73,39 @@ students, browse finance/payments, view the staff directory, or query another
 student's results, even by guessing an ID directly against the API. Every one
 of the 7 roles' permissions above is enforced server-side (not just hidden in
 the UI) and was verified with a dedicated test account per role, not just the
-built-in admin.
+built-in admin — including the full results workflow, where each transition
+(submit/approve/publish/lock/revert) was tested against the wrong role to
+confirm it's rejected, not just that the right role works.
 
 ### Upgrading an existing installation
 
 If you're upgrading from an earlier build, the database migration runs
 automatically the first time you launch the new version — no manual steps
-needed. Two things to know:
+needed. A few things to know:
 
 - Your existing `Administrator` account is automatically upgraded to
   **Super Administrator** (the new full-access role) so you don't lose any
   access — the new, narrower `Administrator` role only applies to accounts you
   create from now on.
-- The migration was tested against a full copy of real production data
-  (492 students) before being shipped, including foreign-key integrity checks
-  and functional insert/update tests — not just "it didn't crash."
+- If you'd already entered any results under the old CA/Exam-per-row model,
+  they're merged automatically into the new one-row-per-course shape (CA rows
+  become itemized components, the Exam row becomes the exam score), and any
+  grade you'd already entered is carried over as-is rather than silently
+  recalculated against the new grade scale.
+- Every migration in this release was tested against a full copy of real
+  production data (492 students) before being shipped, including foreign-key
+  integrity checks and functional insert/update tests — not just "it didn't
+  crash."
 
 ## Not yet built (planned next sprints, per the project roadmap)
 
-Course catalog & student course registration, itemized CA components
-(assignment/test/quiz/practical auto-summed), a configurable grading scale,
-the full Draft→Submitted→Approved→Published→Locked results workflow (currently
-just Draft→Approved), notifications/announcements, in-app Excel import/export,
-restore-from-backup, and a system settings page. SMS/email integration would
-also need a provider account (Twilio, an SMTP relay, etc.) this project doesn't
-have credentials for. A Windows installer **has** been built and tested (see
-below) but only by running the installer's contents programmatically — it has
-not been run through an actual Windows install wizard by a human yet, so treat
-the first real install as a test.
+Notifications/announcements, in-app Excel import/export, restore-from-backup,
+and a system settings page. SMS/email integration would also need a provider
+account (Twilio, an SMTP relay, etc.) this project doesn't have credentials
+for. A Windows installer **has** been built and tested (see below) but only by
+running the installer's contents programmatically — it has not been run
+through an actual Windows install wizard by a human yet, so treat the first
+real install as a test.
 
 ## Project structure
 

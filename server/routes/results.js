@@ -2,15 +2,29 @@ const express = require('express');
 const db = require('../db');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { logAction } = require('../audit');
+const { computeGrade } = require('../lib/grades');
 const { RESULTS_ENTRY_ROLES, RESULTS_APPROVAL_ROLES, SUPER_ADMIN, STUDENT } = require('../lib/roles');
 
 const router = express.Router();
 router.use(requireAuth);
 
-// Roles that can override the "locked once approved" edit/delete restriction —
-// Super Administrator can always intervene; an Examinations Officer approved
-// it, so they can also unlock it.
-const CAN_OVERRIDE_APPROVAL_LOCK = [...RESULTS_APPROVAL_ROLES];
+function withComponents(result) {
+  const components = db.prepare(
+    'SELECT * FROM assessment_components WHERE result_id = ? ORDER BY id'
+  ).all(result.id);
+  return { ...result, components };
+}
+
+function recompute(resultId, examScore) {
+  const components = db.prepare('SELECT * FROM assessment_components WHERE result_id = ?').all(resultId);
+  const caTotal = components.reduce((sum, c) => sum + (c.score || 0), 0);
+  const finalMark = caTotal + (examScore || 0);
+  const { grade, remark } = computeGrade(finalMark);
+  db.prepare(`
+    UPDATE results SET ca_total = ?, exam_score = ?, final_mark = ?, grade = ?, remark = ?, updated_at = datetime('now')
+    WHERE id = ?
+  `).run(caTotal, examScore, finalMark, grade, remark, resultId);
+}
 
 router.get('/', (req, res) => {
   const { studentId } = req.query;
@@ -18,67 +32,112 @@ router.get('/', (req, res) => {
   if (req.user.role === STUDENT && String(req.user.linked_student_id) !== String(studentId)) {
     return res.status(403).json({ error: 'You do not have permission to view these results' });
   }
-  res.json(db.prepare(
-    'SELECT * FROM results WHERE student_id = ? ORDER BY academic_year DESC, semester, type, id'
-  ).all(studentId));
+  let rows = db.prepare(
+    'SELECT * FROM results WHERE student_id = ? ORDER BY academic_year DESC, semester, course_name'
+  ).all(studentId);
+  // Students only see results that have actually been released.
+  if (req.user.role === STUDENT) {
+    rows = rows.filter((r) => r.status === 'Published' || r.status === 'Locked');
+  }
+  res.json(rows.map(withComponents));
 });
 
 router.post('/', requireRole(...RESULTS_ENTRY_ROLES), (req, res) => {
-  const { student_id, course_name, type, academic_year, semester, score, grade } = req.body || {};
+  const { student_id, course_id, course_name, academic_year, semester, components, exam_score } = req.body || {};
   if (!student_id || !course_name) {
     return res.status(400).json({ error: 'student_id and course_name are required' });
   }
-  if (type && !['CA', 'Exam'].includes(type)) {
-    return res.status(400).json({ error: "type must be 'CA' or 'Exam'" });
-  }
-  const info = db.prepare(`
-    INSERT INTO results (student_id, course_name, type, academic_year, semester, score, grade, entered_by, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Draft')
-  `).run(
-    student_id, course_name, type || 'Exam', academic_year || null, semester || null,
-    score || null, grade || null, req.user.full_name || req.user.username
-  );
-  logAction(req, 'CREATE', 'results', info.lastInsertRowid, req.body);
-  res.status(201).json({ id: info.lastInsertRowid });
+  const txn = db.transaction(() => {
+    const info = db.prepare(`
+      INSERT INTO results (student_id, course_id, course_name, academic_year, semester, status, entered_by)
+      VALUES (?, ?, ?, ?, ?, 'Draft', ?)
+    `).run(student_id, course_id || null, course_name, academic_year || null, semester || null, req.user.full_name || req.user.username);
+    const resultId = info.lastInsertRowid;
+    (components || []).forEach((c) => {
+      db.prepare('INSERT INTO assessment_components (result_id, component_name, score, max_score) VALUES (?, ?, ?, ?)')
+        .run(resultId, c.component_name, Number(c.score) || 0, Number(c.max_score) || 100);
+    });
+    recompute(resultId, exam_score != null ? Number(exam_score) : null);
+    return resultId;
+  });
+  const id = txn();
+  logAction(req, 'CREATE', 'results', id, { student_id, course_name, academic_year, semester });
+  res.status(201).json({ id });
 });
 
 router.put('/:id', requireRole(...RESULTS_ENTRY_ROLES), (req, res) => {
   const existing = db.prepare('SELECT * FROM results WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Result not found' });
-  if (existing.status === 'Approved' && !CAN_OVERRIDE_APPROVAL_LOCK.includes(req.user.role)) {
-    return res.status(403).json({ error: 'This result has been approved and can only be edited by an Examinations Officer or Super Administrator' });
+  if (existing.status !== 'Draft' && req.user.role !== SUPER_ADMIN) {
+    return res.status(403).json({ error: `This result is ${existing.status} and can no longer be edited here (a Super Administrator can override)` });
   }
-  const b = { ...existing, ...req.body, id: req.params.id };
-  db.prepare(`
-    UPDATE results SET course_name=@course_name, type=@type, academic_year=@academic_year,
-      semester=@semester, score=@score, grade=@grade
-    WHERE id=@id
-  `).run(b);
+  const { course_name, academic_year, semester, components, exam_score } = req.body || {};
+  const txn = db.transaction(() => {
+    db.prepare(`
+      UPDATE results SET course_name = COALESCE(?, course_name), academic_year = COALESCE(?, academic_year),
+        semester = COALESCE(?, semester) WHERE id = ?
+    `).run(course_name || null, academic_year || null, semester || null, req.params.id);
+    if (components) {
+      db.prepare('DELETE FROM assessment_components WHERE result_id = ?').run(req.params.id);
+      components.forEach((c) => {
+        db.prepare('INSERT INTO assessment_components (result_id, component_name, score, max_score) VALUES (?, ?, ?, ?)')
+          .run(req.params.id, c.component_name, Number(c.score) || 0, Number(c.max_score) || 100);
+      });
+    }
+    const finalExamScore = exam_score !== undefined ? (exam_score === null ? null : Number(exam_score)) : existing.exam_score;
+    recompute(req.params.id, finalExamScore);
+  });
+  txn();
   logAction(req, 'UPDATE', 'results', req.params.id, req.body);
   res.json({ ok: true });
 });
 
-router.put('/:id/approve', requireRole(...RESULTS_APPROVAL_ROLES), (req, res) => {
+// --- Workflow transitions: Draft -> Submitted -> Approved -> Published -> Locked ---
+
+function transition(fromStatus, toStatus, roles, actorFields) {
+  return [requireRole(...roles), (req, res) => {
+    const existing = db.prepare('SELECT * FROM results WHERE id = ?').get(req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Result not found' });
+    if (existing.status !== fromStatus && req.user.role !== SUPER_ADMIN) {
+      return res.status(409).json({ error: `This result is ${existing.status}, not ${fromStatus} — cannot ${toStatus.toLowerCase()} it` });
+    }
+    const actor = req.user.full_name || req.user.username;
+    const setClauses = [`status = '${toStatus}'`, ...actorFields.map((f) => `${f} = @${f}`)];
+    const params = {};
+    actorFields.forEach((f) => {
+      params[f] = f.endsWith('_by') ? actor : new Date().toISOString();
+    });
+    db.prepare(`UPDATE results SET ${setClauses.join(', ')} WHERE id = @id`).run({ ...params, id: req.params.id });
+    logAction(req, toStatus.toUpperCase(), 'results', req.params.id);
+    res.json({ ok: true });
+  }];
+}
+
+router.put('/:id/submit', ...transition('Draft', 'Submitted', RESULTS_ENTRY_ROLES, ['submitted_by', 'submitted_at']));
+router.put('/:id/approve', ...transition('Submitted', 'Approved', RESULTS_APPROVAL_ROLES, ['approved_by', 'approved_at']));
+router.put('/:id/publish', ...transition('Approved', 'Published', RESULTS_APPROVAL_ROLES, ['published_by', 'published_at']));
+router.put('/:id/lock', ...transition('Published', 'Locked', RESULTS_APPROVAL_ROLES, ['locked_by', 'locked_at']));
+
+// Moves a result back one workflow stage (e.g. Published -> Approved) for
+// corrections. Deliberately restricted to Super Administrator only, since it
+// bypasses the normal approval chain.
+const STAGE_ORDER = ['Draft', 'Submitted', 'Approved', 'Published', 'Locked'];
+router.put('/:id/revert', requireRole(SUPER_ADMIN), (req, res) => {
   const existing = db.prepare('SELECT * FROM results WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Result not found' });
-  db.prepare(`
-    UPDATE results SET status = 'Approved', approved_by = ?, approved_at = datetime('now') WHERE id = ?
-  `).run(req.user.full_name || req.user.username, req.params.id);
-  logAction(req, 'APPROVE', 'results', req.params.id);
-  res.json({ ok: true });
-});
-
-router.put('/:id/unapprove', requireRole(...RESULTS_APPROVAL_ROLES), (req, res) => {
-  db.prepare(`UPDATE results SET status = 'Draft', approved_by = NULL, approved_at = NULL WHERE id = ?`).run(req.params.id);
-  logAction(req, 'UNAPPROVE', 'results', req.params.id);
-  res.json({ ok: true });
+  const idx = STAGE_ORDER.indexOf(existing.status);
+  if (idx <= 0) return res.status(400).json({ error: 'This result is already at the earliest stage' });
+  const previousStage = STAGE_ORDER[idx - 1];
+  db.prepare('UPDATE results SET status = ? WHERE id = ?').run(previousStage, req.params.id);
+  logAction(req, 'REVERT', 'results', req.params.id, { from: existing.status, to: previousStage });
+  res.json({ ok: true, status: previousStage });
 });
 
 router.delete('/:id', requireRole(...RESULTS_ENTRY_ROLES), (req, res) => {
   const existing = db.prepare('SELECT * FROM results WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Result not found' });
-  if (existing.status === 'Approved' && !CAN_OVERRIDE_APPROVAL_LOCK.includes(req.user.role)) {
-    return res.status(403).json({ error: 'This result has been approved and can only be deleted by an Examinations Officer or Super Administrator' });
+  if (existing.status !== 'Draft' && req.user.role !== SUPER_ADMIN) {
+    return res.status(403).json({ error: `This result is ${existing.status} and can only be deleted by a Super Administrator` });
   }
   db.prepare('DELETE FROM results WHERE id = ?').run(req.params.id);
   logAction(req, 'DELETE', 'results', req.params.id);

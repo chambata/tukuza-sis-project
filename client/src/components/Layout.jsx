@@ -15,10 +15,12 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import PersonIcon from '@mui/icons-material/Person';
 import BusinessIcon from '@mui/icons-material/Business';
 import EventIcon from '@mui/icons-material/Event';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
+import GradeIcon from '@mui/icons-material/Grade';
 import { useAuth } from '../AuthContext.jsx';
 import {
   STAFF_ROLES, STUDENT, PROGRAMME_WRITE_ROLES, INTAKE_WRITE_ROLES,
-  DEPARTMENT_WRITE_ROLES, FINANCE_ROLES, SYSTEM_ADMIN_ROLES,
+  DEPARTMENT_WRITE_ROLES, FINANCE_ROLES, SYSTEM_ADMIN_ROLES, COURSE_WRITE_ROLES, GRADE_SCALE_WRITE_ROLES,
 } from '../roles.js';
 
 const DRAWER_WIDTH = 230;
@@ -28,10 +30,12 @@ const NAV_ITEMS = [
   { label: 'Dashboard', path: '/', icon: <DashboardIcon />, roles: STAFF_ROLES },
   { label: 'Students', path: '/students', icon: <SchoolIcon />, roles: STAFF_ROLES },
   { label: 'Academic Staff', path: '/staff', icon: <GroupIcon />, roles: STAFF_ROLES },
+  { label: 'Courses', path: '/courses', icon: <MenuBookIcon />, roles: STAFF_ROLES },
   { label: 'Finance', path: '/finance', icon: <PaymentsIcon />, roles: FINANCE_ROLES },
   { label: 'Programmes', path: '/programmes', icon: <SchoolIcon />, roles: PROGRAMME_WRITE_ROLES },
   { label: 'Departments', path: '/departments', icon: <BusinessIcon />, roles: DEPARTMENT_WRITE_ROLES },
   { label: 'Intakes', path: '/intakes', icon: <EventIcon />, roles: INTAKE_WRITE_ROLES },
+  { label: 'Grade Scale', path: '/grade-scale', icon: <GradeIcon />, roles: GRADE_SCALE_WRITE_ROLES },
   { label: 'Academic Years', path: '/academic-years', icon: <HistoryIcon />, roles: SYSTEM_ADMIN_ROLES },
   { label: 'User Accounts', path: '/users', icon: <AdminPanelSettingsIcon />, roles: SYSTEM_ADMIN_ROLES },
   { label: 'Backups', path: '/backups', icon: <BackupIcon />, roles: SYSTEM_ADMIN_ROLES },

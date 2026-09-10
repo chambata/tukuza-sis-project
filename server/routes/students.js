@@ -6,7 +6,7 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const { logAction } = require('../audit');
 const { newDocument, footer } = require('../lib/pdf');
 const { computeGPA } = require('../lib/grades');
-const { STUDENT_WRITE_ROLES, STAFF_ROLES, SUPER_ADMIN, ADMINISTRATOR, STUDENT } = require('../lib/roles');
+const { STUDENT_WRITE_ROLES, STAFF_ROLES, SUPER_ADMIN, ADMINISTRATOR, STUDENT, COURSE_REGISTRATION_ROLES } = require('../lib/roles');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -133,8 +133,16 @@ router.get('/me', requireRole(STUDENT), (req, res) => {
   const student = db.prepare('SELECT * FROM students WHERE id = ?').get(req.user.linked_student_id);
   if (!student) return res.status(404).json({ error: 'Linked student record not found' });
   const payments = db.prepare('SELECT * FROM payments WHERE student_id = ? ORDER BY payment_date DESC, id DESC').all(student.id);
-  const results = db.prepare('SELECT * FROM results WHERE student_id = ? ORDER BY academic_year DESC, semester, type, id').all(student.id);
-  res.json({ ...student, payments, results, gpa: computeGPA(results) });
+  const allResults = db.prepare('SELECT * FROM results WHERE student_id = ? ORDER BY academic_year DESC, semester, course_name').all(student.id);
+  const results = allResults
+    .filter((r) => r.status === 'Published' || r.status === 'Locked')
+    .map((r) => ({ ...r, components: db.prepare('SELECT * FROM assessment_components WHERE result_id = ?').all(r.id) }));
+  const courses = db.prepare(`
+    SELECT c.course_code, c.course_name, c.credit_hours, sc.academic_year, sc.semester
+    FROM student_courses sc JOIN courses c ON c.id = sc.course_id
+    WHERE sc.student_id = ? ORDER BY sc.academic_year DESC, c.course_code
+  `).all(student.id);
+  res.json({ ...student, payments, results, courses, gpa: computeGPA(results) });
 });
 
 router.post('/:id/create-login', requireRole(SUPER_ADMIN, ADMINISTRATOR), (req, res) => {
@@ -168,9 +176,38 @@ router.get('/:id', requireRole(...STAFF_ROLES), (req, res) => {
   const student = db.prepare('SELECT * FROM students WHERE id = ?').get(req.params.id);
   if (!student) return res.status(404).json({ error: 'Student not found' });
   const payments = db.prepare('SELECT * FROM payments WHERE student_id = ? ORDER BY payment_date DESC, id DESC').all(req.params.id);
-  const results = db.prepare('SELECT * FROM results WHERE student_id = ? ORDER BY academic_year DESC, semester, type, id').all(req.params.id);
+  const results = db.prepare('SELECT * FROM results WHERE student_id = ? ORDER BY academic_year DESC, semester, course_name').all(req.params.id)
+    .map((r) => ({ ...r, components: db.prepare('SELECT * FROM assessment_components WHERE result_id = ?').all(r.id) }));
+  const courses = db.prepare(`
+    SELECT sc.id AS enrollment_id, c.id AS course_id, c.course_code, c.course_name, c.credit_hours, sc.academic_year, sc.semester
+    FROM student_courses sc JOIN courses c ON c.id = sc.course_id
+    WHERE sc.student_id = ? ORDER BY sc.academic_year DESC, c.course_code
+  `).all(req.params.id);
   const loginAccount = db.prepare('SELECT id, username, is_active FROM users WHERE linked_student_id = ?').get(req.params.id);
-  res.json({ ...student, payments, results, loginAccount: loginAccount || null });
+  res.json({ ...student, payments, results, courses, loginAccount: loginAccount || null });
+});
+
+router.post('/:id/courses', requireRole(...COURSE_REGISTRATION_ROLES), (req, res) => {
+  const { course_id, academic_year, semester } = req.body || {};
+  if (!course_id) return res.status(400).json({ error: 'course_id is required' });
+  try {
+    const info = db.prepare(
+      'INSERT INTO student_courses (student_id, course_id, academic_year, semester) VALUES (?, ?, ?, ?)'
+    ).run(req.params.id, course_id, academic_year || null, semester || null);
+    logAction(req, 'CREATE', 'student_courses', info.lastInsertRowid, { student_id: req.params.id, course_id });
+    res.status(201).json({ id: info.lastInsertRowid });
+  } catch (err) {
+    if (String(err.message).includes('UNIQUE')) {
+      return res.status(409).json({ error: 'This student is already registered for that course in this period' });
+    }
+    res.status(500).json({ error: 'Failed to register course' });
+  }
+});
+
+router.delete('/:id/courses/:enrollmentId', requireRole(...COURSE_REGISTRATION_ROLES), (req, res) => {
+  db.prepare('DELETE FROM student_courses WHERE id = ? AND student_id = ?').run(req.params.enrollmentId, req.params.id);
+  logAction(req, 'DELETE', 'student_courses', req.params.enrollmentId);
+  res.json({ ok: true });
 });
 
 router.get('/:id/id-card.pdf', staffOrSelf, async (req, res) => {
@@ -256,7 +293,7 @@ router.get('/:id/transcript.pdf', staffOrSelf, (req, res) => {
   const student = db.prepare('SELECT * FROM students WHERE id = ?').get(req.params.id);
   if (!student) return res.status(404).json({ error: 'Student not found' });
   const results = db.prepare(
-    "SELECT * FROM results WHERE student_id = ? AND status = 'Approved' ORDER BY academic_year, semester, type, course_name"
+    "SELECT * FROM results WHERE student_id = ? AND status IN ('Published','Locked') ORDER BY academic_year, semester, course_name"
   ).all(req.params.id);
   const gpa = computeGPA(results);
 
@@ -277,7 +314,7 @@ router.get('/:id/transcript.pdf', staffOrSelf, (req, res) => {
   doc.moveDown();
 
   if (results.length === 0) {
-    doc.text('No approved results are on record for this student yet.');
+    doc.text('No published results are on record for this student yet.');
   } else {
     let currentYear = null;
     results.forEach((r) => {
@@ -291,15 +328,16 @@ router.get('/:id/transcript.pdf', staffOrSelf, (req, res) => {
         doc.font('Helvetica').fontSize(10);
       }
       const rowY = doc.y;
-      doc.text(r.course_name, 60, rowY, { width: 260 });
-      doc.text(r.type, 325, rowY, { width: 50, align: 'center' });
-      doc.text(r.score != null ? String(r.score) : '—', 380, rowY, { width: 55, align: 'center' });
-      doc.text(r.grade || '—', 440, rowY, { width: 55, align: 'center' });
+      doc.text(r.course_name, 60, rowY, { width: 220 });
+      doc.text(r.ca_total != null ? String(r.ca_total) : '—', 285, rowY, { width: 55, align: 'center' });
+      doc.text(r.exam_score != null ? String(r.exam_score) : '—', 340, rowY, { width: 55, align: 'center' });
+      doc.text(r.final_mark != null ? String(r.final_mark) : '—', 395, rowY, { width: 55, align: 'center' });
+      doc.text(r.grade || '—', 450, rowY, { width: 55, align: 'center' });
       doc.moveDown(0.4);
     });
   }
 
-  footer(doc, 'Unofficial transcript generated by the Tukuza SIS. Contact the registrar for a certified copy. Only approved results are shown.');
+  footer(doc, 'Unofficial transcript generated by the Tukuza SIS. Contact the registrar for a certified copy. Only published results are shown.');
   doc.end();
 });
 

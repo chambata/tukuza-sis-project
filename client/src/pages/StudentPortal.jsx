@@ -21,8 +21,6 @@ export default function StudentPortal() {
   if (!me) return <Typography>Loading…</Typography>;
 
   const studentName = [me.first_name, me.middle_name, me.surname].filter(Boolean).join(' ');
-  const caResults = me.results.filter((r) => r.type === 'CA');
-  const examResults = me.results.filter((r) => r.type === 'Exam');
 
   return (
     <Box>
@@ -70,25 +68,61 @@ export default function StudentPortal() {
         </Grid>
       </Paper>
 
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Typography fontWeight={600} sx={{ mb: 1 }}>Continuous Assessment Marks</Typography>
-        {caResults.length === 0 ? (
-          <Typography color="text.secondary" variant="body2">No CA marks recorded yet.</Typography>
-        ) : (
-          <ResultsTable rows={caResults} />
-        )}
-      </Paper>
+      {me.courses && me.courses.length > 0 && (
+        <Paper sx={{ p: 3, mb: 3 }}>
+          <Typography fontWeight={600} sx={{ mb: 1 }}>Registered Courses</Typography>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Code</TableCell><TableCell>Course</TableCell><TableCell>Credit Hours</TableCell><TableCell>Period</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {me.courses.map((c, i) => (
+                <TableRow key={i}>
+                  <TableCell>{c.course_code}</TableCell>
+                  <TableCell>{c.course_name}</TableCell>
+                  <TableCell>{c.credit_hours || '—'}</TableCell>
+                  <TableCell>{[c.academic_year, c.semester].filter(Boolean).join(' · ') || '—'}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Paper>
+      )}
 
       <Paper sx={{ p: 3, mb: 3 }}>
-        <Typography fontWeight={600} sx={{ mb: 1 }}>Examination Results</Typography>
-        {examResults.length === 0 ? (
-          <Typography color="text.secondary" variant="body2">No examination results recorded yet.</Typography>
+        <Typography fontWeight={600} sx={{ mb: 1 }}>Results</Typography>
+        {me.results.length === 0 ? (
+          <Typography color="text.secondary" variant="body2">
+            No results have been published yet. Results appear here once your Examinations Officer publishes them.
+          </Typography>
         ) : (
-          <ResultsTable rows={examResults} />
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Course</TableCell>
+                <TableCell>Period</TableCell>
+                <TableCell align="center">CA Total</TableCell>
+                <TableCell align="center">Exam</TableCell>
+                <TableCell align="center">Final Mark</TableCell>
+                <TableCell align="center">Grade</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {me.results.map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell>{r.course_name}</TableCell>
+                  <TableCell>{[r.academic_year, r.semester].filter(Boolean).join(' · ') || '—'}</TableCell>
+                  <TableCell align="center">{r.ca_total ?? '—'}</TableCell>
+                  <TableCell align="center">{r.exam_score ?? '—'}</TableCell>
+                  <TableCell align="center">{r.final_mark ?? '—'}</TableCell>
+                  <TableCell align="center"><Chip size="small" label={r.grade || '—'} color="success" /></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         )}
-        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-          Results marked "Pending approval" are not yet final and may still change.
-        </Typography>
       </Paper>
 
       <Paper sx={{ p: 3 }}>
@@ -119,41 +153,5 @@ export default function StudentPortal() {
         )}
       </Paper>
     </Box>
-  );
-}
-
-function ResultsTable({ rows }) {
-  return (
-    <Table size="small">
-      <TableHead>
-        <TableRow>
-          <TableCell>Course</TableCell>
-          <TableCell>Academic Year</TableCell>
-          <TableCell>Semester</TableCell>
-          <TableCell align="center">Score</TableCell>
-          <TableCell align="center">Grade</TableCell>
-          <TableCell>Status</TableCell>
-        </TableRow>
-      </TableHead>
-      <TableBody>
-        {rows.map((r) => (
-          <TableRow key={r.id}>
-            <TableCell>{r.course_name}</TableCell>
-            <TableCell>{r.academic_year || '—'}</TableCell>
-            <TableCell>{r.semester || '—'}</TableCell>
-            <TableCell align="center">{r.score ?? '—'}</TableCell>
-            <TableCell align="center">{r.grade || '—'}</TableCell>
-            <TableCell>
-              <Chip
-                size="small"
-                label={r.status === 'Approved' ? 'Final' : 'Pending approval'}
-                color={r.status === 'Approved' ? 'success' : 'default'}
-                variant={r.status === 'Approved' ? 'filled' : 'outlined'}
-              />
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
   );
 }

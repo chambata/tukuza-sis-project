@@ -16,10 +16,12 @@ import Programmes from './pages/Programmes.jsx';
 import AcademicYears from './pages/AcademicYears.jsx';
 import Departments from './pages/Departments.jsx';
 import Intakes from './pages/Intakes.jsx';
+import Courses from './pages/Courses.jsx';
+import GradeScales from './pages/GradeScales.jsx';
 import { useAuth } from './AuthContext.jsx';
 import {
   STAFF_ROLES, STUDENT, FINANCE_ROLES, PROGRAMME_WRITE_ROLES, INTAKE_WRITE_ROLES,
-  DEPARTMENT_WRITE_ROLES, SYSTEM_ADMIN_ROLES,
+  DEPARTMENT_WRITE_ROLES, SYSTEM_ADMIN_ROLES, GRADE_SCALE_WRITE_ROLES,
 } from './roles.js';
 
 // Student accounts land on their own profile instead of the staff dashboard.
@@ -123,6 +125,22 @@ export default function App() {
         element={
           <ProtectedRoute roles={INTAKE_WRITE_ROLES}>
             <Layout><Intakes /></Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/courses"
+        element={
+          <ProtectedRoute roles={STAFF_ROLES}>
+            <Layout><Courses /></Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/grade-scale"
+        element={
+          <ProtectedRoute roles={GRADE_SCALE_WRITE_ROLES}>
+            <Layout><GradeScales /></Layout>
           </ProtectedRoute>
         }
       />

@@ -21,6 +21,8 @@ app.use('/api/programmes', require('./routes/programmes'));
 app.use('/api/academic-years', require('./routes/academicYears'));
 app.use('/api/departments', require('./routes/departments'));
 app.use('/api/intakes', require('./routes/intakes'));
+app.use('/api/courses', require('./routes/courses'));
+app.use('/api/grade-scales', require('./routes/gradeScales'));
 
 app.use((err, req, res, next) => {
   console.error(err);
