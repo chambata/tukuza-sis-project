@@ -4,10 +4,13 @@ import DescriptionIcon from '@mui/icons-material/Description';
 import SchoolIcon from '@mui/icons-material/School';
 import api from '../api';
 import { openPdf } from '../pdf';
+import { useCurrency } from '../SettingsContext.jsx';
 
-const money = (n) => `K${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+const formatMoney = (n, cur) => `${cur}${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
 
 export default function StudentPortal() {
+  const cur = useCurrency();
+  const money = (n) => formatMoney(n, cur);
   const [me, setMe] = useState(null);
   const [error, setError] = useState('');
 

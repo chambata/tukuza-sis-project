@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Grid, Paper, Typography, Box, List, ListItem, ListItemText, Chip } from '@mui/material';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import api from '../api';
+import { useCurrency } from '../SettingsContext.jsx';
 
 const COLORS = ['#0b5d3b', '#c9a227', '#2e7d32', '#8d6e63', '#5c6bc0', '#00838f'];
 
@@ -15,9 +16,11 @@ function StatCard({ label, value, sub }) {
   );
 }
 
-const money = (n) => `K${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+const formatMoney = (n, cur) => `${cur}${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
 
 export default function Dashboard() {
+  const cur = useCurrency();
+  const money = (n) => formatMoney(n, cur);
   const [stats, setStats] = useState(null);
 
   useEffect(() => {

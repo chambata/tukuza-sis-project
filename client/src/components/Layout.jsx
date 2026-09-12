@@ -17,10 +17,14 @@ import BusinessIcon from '@mui/icons-material/Business';
 import EventIcon from '@mui/icons-material/Event';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import GradeIcon from '@mui/icons-material/Grade';
+import CampaignIcon from '@mui/icons-material/Campaign';
+import SettingsIcon from '@mui/icons-material/Settings';
 import { useAuth } from '../AuthContext.jsx';
+import { useSettings } from '../SettingsContext.jsx';
+import NotificationBell from './NotificationBell.jsx';
 import {
   STAFF_ROLES, STUDENT, PROGRAMME_WRITE_ROLES, INTAKE_WRITE_ROLES,
-  DEPARTMENT_WRITE_ROLES, FINANCE_ROLES, SYSTEM_ADMIN_ROLES, COURSE_WRITE_ROLES, GRADE_SCALE_WRITE_ROLES,
+  DEPARTMENT_WRITE_ROLES, FINANCE_ROLES, SYSTEM_ADMIN_ROLES, GRADE_SCALE_WRITE_ROLES,
 } from '../roles.js';
 
 const DRAWER_WIDTH = 230;
@@ -32,6 +36,7 @@ const NAV_ITEMS = [
   { label: 'Academic Staff', path: '/staff', icon: <GroupIcon />, roles: STAFF_ROLES },
   { label: 'Courses', path: '/courses', icon: <MenuBookIcon />, roles: STAFF_ROLES },
   { label: 'Finance', path: '/finance', icon: <PaymentsIcon />, roles: FINANCE_ROLES },
+  { label: 'Announcements', path: '/announcements', icon: <CampaignIcon />, roles: null },
   { label: 'Programmes', path: '/programmes', icon: <SchoolIcon />, roles: PROGRAMME_WRITE_ROLES },
   { label: 'Departments', path: '/departments', icon: <BusinessIcon />, roles: DEPARTMENT_WRITE_ROLES },
   { label: 'Intakes', path: '/intakes', icon: <EventIcon />, roles: INTAKE_WRITE_ROLES },
@@ -40,10 +45,12 @@ const NAV_ITEMS = [
   { label: 'User Accounts', path: '/users', icon: <AdminPanelSettingsIcon />, roles: SYSTEM_ADMIN_ROLES },
   { label: 'Backups', path: '/backups', icon: <BackupIcon />, roles: SYSTEM_ADMIN_ROLES },
   { label: 'Audit Log', path: '/audit', icon: <HistoryIcon />, roles: SYSTEM_ADMIN_ROLES },
+  { label: 'Settings', path: '/settings', icon: <SettingsIcon />, roles: SYSTEM_ADMIN_ROLES },
 ];
 
 export default function Layout({ children }) {
   const { user, logout } = useAuth();
+  const { settings } = useSettings();
   const location = useLocation();
   const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = React.useState(null);
@@ -55,8 +62,9 @@ export default function Layout({ children }) {
       <AppBar position="fixed" sx={{ zIndex: (t) => t.zIndex.drawer + 1 }} elevation={1}>
         <Toolbar>
           <Typography variant="h6" noWrap sx={{ flexGrow: 1, fontWeight: 700 }}>
-            Tukuza SIS <Typography component="span" variant="body2" sx={{ opacity: 0.8 }}>— Fountain of Peace University College</Typography>
+            Tukuza SIS <Typography component="span" variant="body2" sx={{ opacity: 0.8 }}>— {settings.institution_name}</Typography>
           </Typography>
+          <NotificationBell />
           <Chip label={user?.role} size="small" color="secondary" sx={{ mr: 2, fontWeight: 600 }} />
           <IconButton onClick={(e) => setAnchorEl(e.currentTarget)} size="small">
             <Avatar sx={{ width: 32, height: 32, bgcolor: 'secondary.main' }}>

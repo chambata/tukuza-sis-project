@@ -5,14 +5,18 @@ import {
   TextField, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, MenuItem, Alert,
 } from '@mui/material';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import DescriptionIcon from '@mui/icons-material/Description';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import api from '../api';
 import { openPdf } from '../pdf';
+import { useCurrency } from '../SettingsContext.jsx';
 
-const money = (n) => `K${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+const formatMoney = (n, cur) => `${cur}${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
 
 export default function Finance() {
+  const cur = useCurrency();
+  const money = (n) => formatMoney(n, cur);
   const [rows, setRows] = useState([]);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -60,12 +64,27 @@ export default function Finance() {
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h5" fontWeight={700}>Finance — Payments</Typography>
-        <Button
-          variant="outlined" startIcon={<PictureAsPdfIcon />}
-          onClick={() => openPdf(`/payments/report.pdf?from=${from}&to=${to}`, 'financial-report.pdf')}
-        >
-          Financial Report
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            variant="outlined" startIcon={<PictureAsPdfIcon />}
+            onClick={() => openPdf(`/payments/report.pdf?from=${from}&to=${to}`, 'financial-report.pdf')}
+          >
+            Financial Report
+          </Button>
+          <Button
+            variant="outlined" startIcon={<DescriptionIcon />}
+            onClick={async () => {
+              const res = await api.get(`/payments/export.xlsx?from=${from}&to=${to}`, { responseType: 'blob' });
+              const url = window.URL.createObjectURL(new Blob([res.data]));
+              const a = document.createElement('a');
+              a.href = url; a.download = 'payments-export.xlsx';
+              document.body.appendChild(a); a.click(); a.remove();
+              window.URL.revokeObjectURL(url);
+            }}
+          >
+            Export Excel
+          </Button>
+        </Box>
       </Box>
 
       <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>

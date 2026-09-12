@@ -199,6 +199,28 @@ CREATE TABLE IF NOT EXISTS audit_log (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS announcements (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  target TEXT NOT NULL DEFAULT 'All Users' CHECK (target IN ('All Students','Specific Programme','Lecturers','Staff','All Users')),
+  target_programme TEXT,
+  created_by TEXT,
+  created_by_user_id INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,
+  message TEXT NOT NULL,
+  related_entity TEXT,
+  related_id INTEGER,
+  is_read INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_students_program ON students(program);
 CREATE INDEX IF NOT EXISTS idx_students_surname ON students(surname);
 CREATE INDEX IF NOT EXISTS idx_payments_student ON payments(student_id);
@@ -208,6 +230,7 @@ CREATE INDEX IF NOT EXISTS idx_assessment_components_result ON assessment_compon
 CREATE INDEX IF NOT EXISTS idx_student_courses_student ON student_courses(student_id);
 CREATE INDEX IF NOT EXISTS idx_student_courses_course ON student_courses(course_id);
 CREATE INDEX IF NOT EXISTS idx_courses_programme ON courses(programme_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
 -- Note: indexes on columns added by a later migration (students.department_id,
 -- students.intake_id, programmes.department_id) are created in db.js *after*
 -- those migrations run, not here — this file also runs unconditionally

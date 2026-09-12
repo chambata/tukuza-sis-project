@@ -3,7 +3,8 @@ const express = require('express');
 const db = require('../db');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { logAction } = require('../audit');
-const { newDocument, footer } = require('../lib/pdf');
+const { newDocument, footer, currencySymbol } = require('../lib/pdf');
+const { notifyStudent } = require('../lib/notifications');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -76,6 +77,7 @@ router.post('/', requireRole(...FINANCE_ROLES), (req, res) => {
   });
   const id = txn();
   logAction(req, 'CREATE', 'payments', id, { student_id, amount: amt, receipt_no: receiptNo });
+  notifyStudent(student_id, 'PAYMENT_RECEIVED', `Payment received: ${currencySymbol()}${amt.toLocaleString(undefined, { minimumFractionDigits: 2 })} (Receipt ${receiptNo})`, 'payments', id);
   res.status(201).json({ id, receipt_no: receiptNo });
 });
 
@@ -109,6 +111,41 @@ router.delete('/:id', requireRole(...FINANCE_ROLES), (req, res) => {
   res.json({ ok: true });
 });
 
+router.get('/export.xlsx', requireRole(...FINANCE_ROLES), (req, res) => {
+  const { from, to } = req.query;
+  const where = [];
+  const params = {};
+  if (from) { where.push('payment_date >= @from'); params.from = from; }
+  if (to) { where.push('payment_date <= @to'); params.to = to; }
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const rows = db.prepare(`
+    SELECT p.*, s.first_name, s.surname, s.student_id AS student_number
+    FROM payments p JOIN students s ON s.id = p.student_id
+    ${whereSql} ORDER BY p.payment_date, p.id
+  `).all(params);
+
+  const XLSX = require('xlsx');
+  const sheetRows = rows.map((r) => ({
+    'Receipt No.': r.receipt_no,
+    Date: r.payment_date,
+    'Student ID': r.student_number,
+    Student: `${r.first_name} ${r.surname}`,
+    Method: r.method,
+    'Reference No.': r.reference_no || '',
+    Amount: r.amount,
+    'Received By': r.received_by || '',
+    Notes: r.notes || '',
+  }));
+  const worksheet = XLSX.utils.json_to_sheet(sheetRows);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Payments');
+  const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', 'attachment; filename="payments-export.xlsx"');
+  res.send(buffer);
+});
+
 router.get('/report.pdf', requireRole(...FINANCE_ROLES), (req, res) => {
   const { from, to } = req.query;
   const where = [];
@@ -138,28 +175,29 @@ router.get('/report.pdf', requireRole(...FINANCE_ROLES), (req, res) => {
   res.setHeader('Content-Disposition', 'inline; filename="financial-report.pdf"');
 
   const doc = newDocument({ title: 'Financial Report' });
+  const cur = currencySymbol();
   doc.pipe(res);
 
   const period = [from && `From ${from}`, to && `To ${to}`].filter(Boolean).join('   ') || 'All time';
   doc.fontSize(10).fillColor('#444444').text(`Period: ${period}`);
   doc.fillColor('#000000').moveDown();
 
-  doc.font('Helvetica-Bold').fontSize(13).text(`Total Collected: K${totalCollected.toLocaleString(undefined, { minimumFractionDigits: 2 })}`);
+  doc.font('Helvetica-Bold').fontSize(13).text(`Total Collected: ${cur}${totalCollected.toLocaleString(undefined, { minimumFractionDigits: 2 })}`);
   doc.font('Helvetica').fontSize(10).text(`(${rows.length} payment${rows.length === 1 ? '' : 's'})`);
-  doc.text(`Balance Outstanding Across All Students: K${outstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}`);
+  doc.text(`Balance Outstanding Across All Students: ${cur}${outstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}`);
   doc.moveDown();
 
   doc.font('Helvetica-Bold').fontSize(11).text('By Payment Method');
   doc.font('Helvetica').fontSize(10);
   Object.entries(byMethod).sort((a, b) => b[1] - a[1]).forEach(([method, amt]) => {
-    doc.text(`${method}: K${amt.toLocaleString(undefined, { minimumFractionDigits: 2 })}`);
+    doc.text(`${method}: ${cur}${amt.toLocaleString(undefined, { minimumFractionDigits: 2 })}`);
   });
   doc.moveDown();
 
   doc.font('Helvetica-Bold').fontSize(11).text('By Programme');
   doc.font('Helvetica').fontSize(10);
   Object.entries(byProgram).sort((a, b) => b[1] - a[1]).forEach(([program, amt]) => {
-    doc.text(`${program}: K${amt.toLocaleString(undefined, { minimumFractionDigits: 2 })}`);
+    doc.text(`${program}: ${cur}${amt.toLocaleString(undefined, { minimumFractionDigits: 2 })}`);
   });
   doc.moveDown();
 
@@ -174,7 +212,7 @@ router.get('/report.pdf', requireRole(...FINANCE_ROLES), (req, res) => {
       doc.text(r.receipt_no, 125, rowY, { width: 110 });
       doc.text(`${r.first_name} ${r.surname}`, 240, rowY, { width: 150 });
       doc.text(r.method, 395, rowY, { width: 80 });
-      doc.text(`K${r.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 480, rowY, { width: 65, align: 'right' });
+      doc.text(`${cur}${r.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 480, rowY, { width: 65, align: 'right' });
       doc.moveDown(0.5);
     });
   }
@@ -205,6 +243,7 @@ router.get('/:id/receipt.pdf', requireRole(...FINANCE_ROLES), (req, res) => {
   res.setHeader('Content-Disposition', `inline; filename="${payment.receipt_no}.pdf"`);
 
   const doc = newDocument({ title: 'Official Receipt' });
+  const cur = currencySymbol();
   doc.pipe(res);
 
   const studentName = [payment.first_name, payment.middle_name, payment.surname].filter(Boolean).join(' ');
@@ -219,7 +258,7 @@ router.get('/:id/receipt.pdf', requireRole(...FINANCE_ROLES), (req, res) => {
   doc.moveDown();
 
   doc.font('Helvetica-Bold').fontSize(20).text(
-    `Amount: K${Number(payment.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+    `Amount: ${cur}${Number(payment.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
     { align: 'left' }
   );
   doc.font('Helvetica').fontSize(11);
@@ -233,12 +272,12 @@ router.get('/:id/receipt.pdf', requireRole(...FINANCE_ROLES), (req, res) => {
   const boxTop = doc.y + 12;
   doc.fontSize(10);
   doc.text(`Total Fees:`, 65, boxTop);
-  doc.text(`K${Number(payment.total_fees).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 200, boxTop);
+  doc.text(`${cur}${Number(payment.total_fees).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 200, boxTop);
   doc.text(`Total Paid to Date:`, 65, boxTop + 22);
-  doc.text(`K${Number(payment.fees_paid).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 200, boxTop + 22);
+  doc.text(`${cur}${Number(payment.fees_paid).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 200, boxTop + 22);
   doc.font('Helvetica-Bold');
   doc.text(`Balance Owing:`, 65, boxTop + 44);
-  doc.text(`K${Number(payment.balance_owing).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 200, boxTop + 44);
+  doc.text(`${cur}${Number(payment.balance_owing).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 200, boxTop + 44);
   doc.font('Helvetica');
 
   doc.moveDown(6);

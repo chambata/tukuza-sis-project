@@ -4,7 +4,7 @@ const cors = require('cors');
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: '5mb' })); // allow base64 passport photo uploads
+app.use(express.json({ limit: '20mb' })); // allow base64 passport photo uploads and backup-file restores
 
 app.get('/api/health', (req, res) => res.json({ ok: true, service: 'tukuza-sis-server' }));
 
@@ -23,6 +23,9 @@ app.use('/api/departments', require('./routes/departments'));
 app.use('/api/intakes', require('./routes/intakes'));
 app.use('/api/courses', require('./routes/courses'));
 app.use('/api/grade-scales', require('./routes/gradeScales'));
+app.use('/api/settings', require('./routes/settings'));
+app.use('/api/announcements', require('./routes/announcements'));
+app.use('/api/notifications', require('./routes/notifications'));
 
 app.use((err, req, res, next) => {
   console.error(err);

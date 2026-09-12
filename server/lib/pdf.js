@@ -1,14 +1,20 @@
 const PDFDocument = require('pdfkit');
+const { getAllSettings } = require('./settings');
 
 const BRAND_GREEN = '#0b5d3b';
 const BRAND_GOLD = '#c9a227';
 
 /**
- * Creates a new PDF document and draws a consistent FPC letterhead at the top.
- * Returns the document; caller is responsible for piping it to a response and
- * calling doc.end() when finished adding content.
+ * Creates a new PDF document and draws a letterhead using the configured
+ * institution name/address (Settings page) at the top. Returns the document;
+ * caller is responsible for piping it to a response and calling doc.end()
+ * when finished adding content.
  */
 function newDocument({ title }) {
+  const settings = getAllSettings();
+  const institutionName = settings.institution_name || 'Fountain of Peace University College';
+  const institutionAddress = settings.institution_address || '';
+
   const doc = new PDFDocument({ size: 'A4', margin: 50 });
 
   doc.rect(0, 0, doc.page.width, 90).fill(BRAND_GREEN);
@@ -16,11 +22,11 @@ function newDocument({ title }) {
     .fillColor('#ffffff')
     .fontSize(16)
     .font('Helvetica-Bold')
-    .text('FOUNTAIN OF PEACE UNIVERSITY COLLEGE', 50, 25);
+    .text(institutionName.toUpperCase(), 50, 25, { width: doc.page.width - 200 });
   doc
     .fontSize(9)
     .font('Helvetica')
-    .text('P.O. Box 560277, Lusaka, Zambia', 50, 46)
+    .text(institutionAddress, 50, 46)
     .text('Tukuza Student Information Management System', 50, 60);
 
   if (title) {
@@ -36,6 +42,11 @@ function newDocument({ title }) {
   return doc;
 }
 
+function currencySymbol() {
+  const settings = getAllSettings();
+  return settings.currency_symbol || 'K';
+}
+
 function footer(doc, note) {
   const bottom = doc.page.height - 60;
   doc
@@ -47,4 +58,4 @@ function footer(doc, note) {
     });
 }
 
-module.exports = { newDocument, footer, BRAND_GREEN, BRAND_GOLD };
+module.exports = { newDocument, footer, currencySymbol, BRAND_GREEN, BRAND_GOLD };

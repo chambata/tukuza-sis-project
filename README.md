@@ -97,15 +97,42 @@ needed. A few things to know:
   integrity checks and functional insert/update tests — not just "it didn't
   crash."
 
+### This release: Settings, Notifications/Announcements, Excel import/export, Restore
+
+- **System Settings page** (Super Administrator): institution name, address,
+  phone, email, logo, and currency (code + symbol) — used throughout the app
+  (nav header, all PDFs, and every money amount in the UI), not just stored
+  and ignored.
+- **Announcements & Notifications**: Super Administrator/Administrator post
+  announcements targeted at All Users, All Students, a specific Programme,
+  Lecturers, or Staff; a notification bell in the top bar shows unread counts
+  and lets anyone mark items read. The system also auto-notifies: a student
+  when a payment is recorded or a result is published, and any user when
+  their account is created.
+- **In-app Excel import/export**: import students from an .xlsx/.xls/.csv
+  file with flexible column-name matching (headers like "First Name" or
+  "Student ID" don't need to match exactly), a preview showing which rows are
+  valid vs. flagged (missing fields, duplicate IDs already in the system or
+  within the file) before anything is committed. Export students and payments
+  lists to .xlsx.
+- **Restore from backup**: Super Administrator can restore the live database
+  from any existing local backup, or upload a `.db` file from elsewhere (e.g.
+  copied from the offsite folder on another machine). The file is validated
+  before anything happens, a fresh safety backup of the *current* state is
+  taken automatically first, and the app restarts itself afterward to load
+  the restored data cleanly. Tested by actually restoring between two
+  differently-sized databases and confirming the live data, not just the API
+  response, changed correctly each time — including that a corrupted/garbage
+  file is rejected without touching anything.
+
 ## Not yet built (planned next sprints, per the project roadmap)
 
-Notifications/announcements, in-app Excel import/export, restore-from-backup,
-and a system settings page. SMS/email integration would also need a provider
-account (Twilio, an SMTP relay, etc.) this project doesn't have credentials
-for. A Windows installer **has** been built and tested (see below) but only by
-running the installer's contents programmatically — it has not been run
-through an actual Windows install wizard by a human yet, so treat the first
-real install as a test.
+SMS/email integration would need a provider account (Twilio, an SMTP relay,
+etc.) this project doesn't have credentials for — the notification system is
+otherwise built and ready to plug that in. A Windows installer **has** been
+built and tested (see below) but only by running the installer's contents
+programmatically — it has not been run through an actual Windows install
+wizard by a human yet, so treat the first real install as a test.
 
 ## Project structure
 

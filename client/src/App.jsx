@@ -18,6 +18,8 @@ import Departments from './pages/Departments.jsx';
 import Intakes from './pages/Intakes.jsx';
 import Courses from './pages/Courses.jsx';
 import GradeScales from './pages/GradeScales.jsx';
+import Announcements from './pages/Announcements.jsx';
+import Settings from './pages/Settings.jsx';
 import { useAuth } from './AuthContext.jsx';
 import {
   STAFF_ROLES, STUDENT, FINANCE_ROLES, PROGRAMME_WRITE_ROLES, INTAKE_WRITE_ROLES,
@@ -149,6 +151,22 @@ export default function App() {
         element={
           <ProtectedRoute roles={SYSTEM_ADMIN_ROLES}>
             <Layout><AcademicYears /></Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/announcements"
+        element={
+          <ProtectedRoute>
+            <Layout><Announcements /></Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <ProtectedRoute roles={SYSTEM_ADMIN_ROLES}>
+            <Layout><Settings /></Layout>
           </ProtectedRoute>
         }
       />

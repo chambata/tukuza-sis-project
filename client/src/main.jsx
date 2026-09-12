@@ -5,6 +5,7 @@ import CssBaseline from '@mui/material/CssBaseline';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import App from './App.jsx';
 import { AuthProvider } from './AuthContext.jsx';
+import { SettingsProvider } from './SettingsContext.jsx';
 
 const theme = createTheme({
   palette: {
@@ -21,7 +22,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       <CssBaseline />
       <HashRouter>
         <AuthProvider>
-          <App />
+          <SettingsProvider>
+            <App />
+          </SettingsProvider>
         </AuthProvider>
       </HashRouter>
     </ThemeProvider>

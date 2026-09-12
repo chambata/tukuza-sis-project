@@ -270,5 +270,23 @@ if (userCount === 0) {
   console.log('[db] Seeded default admin user -> username: admin / password: Admin@2026 (change this after first login)');
 }
 
+// Seed default institution settings if none configured yet — so PDFs and the
+// UI have sensible defaults from the very first launch, and an Administrator
+// can change them afterward from the Settings page.
+const DEFAULT_SETTINGS = {
+  institution_name: 'Fountain of Peace University College',
+  institution_address: 'P.O. Box 560277, Lusaka, Zambia',
+  institution_phone: '',
+  institution_email: '',
+  institution_logo: '',
+  currency_code: 'ZMW',
+  currency_symbol: 'K',
+};
+const insertSettingIfMissing = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
+const settingsTxn = db.transaction(() => {
+  Object.entries(DEFAULT_SETTINGS).forEach(([key, value]) => insertSettingIfMissing.run(key, value));
+});
+settingsTxn();
+
 module.exports = db;
 module.exports.DB_PATH = DB_PATH;

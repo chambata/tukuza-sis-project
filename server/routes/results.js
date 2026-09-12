@@ -4,6 +4,7 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const { logAction } = require('../audit');
 const { computeGrade } = require('../lib/grades');
 const { RESULTS_ENTRY_ROLES, RESULTS_APPROVAL_ROLES, SUPER_ADMIN, STUDENT } = require('../lib/roles');
+const { notifyStudent } = require('../lib/notifications');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -94,7 +95,7 @@ router.put('/:id', requireRole(...RESULTS_ENTRY_ROLES), (req, res) => {
 
 // --- Workflow transitions: Draft -> Submitted -> Approved -> Published -> Locked ---
 
-function transition(fromStatus, toStatus, roles, actorFields) {
+function transition(fromStatus, toStatus, roles, actorFields, onSuccess) {
   return [requireRole(...roles), (req, res) => {
     const existing = db.prepare('SELECT * FROM results WHERE id = ?').get(req.params.id);
     if (!existing) return res.status(404).json({ error: 'Result not found' });
@@ -109,13 +110,16 @@ function transition(fromStatus, toStatus, roles, actorFields) {
     });
     db.prepare(`UPDATE results SET ${setClauses.join(', ')} WHERE id = @id`).run({ ...params, id: req.params.id });
     logAction(req, toStatus.toUpperCase(), 'results', req.params.id);
+    if (onSuccess) onSuccess(existing);
     res.json({ ok: true });
   }];
 }
 
 router.put('/:id/submit', ...transition('Draft', 'Submitted', RESULTS_ENTRY_ROLES, ['submitted_by', 'submitted_at']));
 router.put('/:id/approve', ...transition('Submitted', 'Approved', RESULTS_APPROVAL_ROLES, ['approved_by', 'approved_at']));
-router.put('/:id/publish', ...transition('Approved', 'Published', RESULTS_APPROVAL_ROLES, ['published_by', 'published_at']));
+router.put('/:id/publish', ...transition('Approved', 'Published', RESULTS_APPROVAL_ROLES, ['published_by', 'published_at'], (result) => {
+  notifyStudent(result.student_id, 'RESULT_PUBLISHED', `Your result for ${result.course_name} has been published`, 'results', result.id);
+}));
 router.put('/:id/lock', ...transition('Published', 'Locked', RESULTS_APPROVAL_ROLES, ['locked_by', 'locked_at']));
 
 // Moves a result back one workflow stage (e.g. Published -> Approved) for

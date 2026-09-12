@@ -1,4 +1,5 @@
 const { SYSTEM_ADMIN_ROLES, STAFF_ROLES, LECTURER } = require('../lib/roles');
+const { notify } = require('../lib/notifications');
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
@@ -30,6 +31,7 @@ router.post('/', (req, res) => {
       'INSERT INTO users (username, password_hash, full_name, role) VALUES (?, ?, ?, ?)'
     ).run(username.trim(), hash, full_name || null, role);
     logAction(req, 'CREATE', 'users', info.lastInsertRowid, { username, role });
+    notify(info.lastInsertRowid, 'ACCOUNT_CREATED', `Welcome — your ${role} account has been created.`, 'users', info.lastInsertRowid);
     res.status(201).json({ id: info.lastInsertRowid });
   } catch (err) {
     if (String(err.message).includes('UNIQUE')) {

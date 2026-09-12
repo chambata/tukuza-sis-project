@@ -1,12 +1,14 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const QRCode = require('qrcode');
+const XLSX = require('xlsx');
 const db = require('../db');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { logAction } = require('../audit');
-const { newDocument, footer } = require('../lib/pdf');
+const { newDocument, footer, currencySymbol } = require('../lib/pdf');
 const { computeGPA } = require('../lib/grades');
 const { STUDENT_WRITE_ROLES, STAFF_ROLES, SUPER_ADMIN, ADMINISTRATOR, STUDENT, COURSE_REGISTRATION_ROLES } = require('../lib/roles');
+const { notify } = require('../lib/notifications');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -59,6 +61,47 @@ router.get('/programs', requireRole(...STAFF_ROLES), (req, res) => {
   res.json(rows.map((r) => r.program));
 });
 
+// GET /api/students/export.xlsx — same filters as report.pdf, but as a
+// spreadsheet. Registered before /:id for the same reason as report.pdf.
+router.get('/export.xlsx', requireRole(...STAFF_ROLES), (req, res) => {
+  const { search = '', program = '', status = '' } = req.query;
+  const where = [];
+  const params = {};
+  if (search) {
+    where.push('(first_name LIKE @q OR surname LIKE @q OR middle_name LIKE @q OR student_id LIKE @q)');
+    params.q = `%${search}%`;
+  }
+  if (program) { where.push('program = @program'); params.program = program; }
+  if (status) { where.push('status = @status'); params.status = status; }
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const rows = db.prepare(`SELECT * FROM students ${whereSql} ORDER BY surname, first_name`).all(params);
+
+  const sheetRows = rows.map((r) => ({
+    'Student ID': r.student_id,
+    'First Name': r.first_name,
+    'Middle Name': r.middle_name || '',
+    Surname: r.surname,
+    Gender: r.gender || '',
+    'NRC No.': r.nrc_no || '',
+    Programme: r.program || '',
+    'Year of Graduation': r.year_of_graduation || '',
+    Status: r.status,
+    'Total Fees': r.total_fees,
+    'Fees Paid': r.fees_paid,
+    'Balance Owing': r.balance_owing,
+    Phone: r.phone_number || '',
+    Email: r.email || '',
+  }));
+  const worksheet = XLSX.utils.json_to_sheet(sheetRows);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Students');
+  const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', 'attachment; filename="students-export.xlsx"');
+  res.send(buffer);
+});
+
 // GET /api/students/report.pdf?search=&program=&status=  — must be registered
 // before the generic /:id route below, or Express will treat "report.pdf" as an id.
 router.get('/report.pdf', requireRole(...STAFF_ROLES), (req, res) => {
@@ -78,6 +121,7 @@ router.get('/report.pdf', requireRole(...STAFF_ROLES), (req, res) => {
   res.setHeader('Content-Disposition', 'inline; filename="students-report.pdf"');
 
   const doc = newDocument({ title: 'Students Report' });
+  const cur = currencySymbol();
   doc.pipe(res);
 
   const filters = [
@@ -115,8 +159,8 @@ router.get('/report.pdf', requireRole(...STAFF_ROLES), (req, res) => {
     doc.text(r.student_id, colX.id, rowY, { width: 75 });
     doc.text([r.first_name, r.surname].filter(Boolean).join(' '), colX.name, rowY, { width: 165 });
     doc.text(r.program || '—', colX.program, rowY, { width: 125 });
-    doc.text(`K${Number(r.fees_paid).toLocaleString()}`, colX.fees, rowY, { width: 65 });
-    doc.text(`K${Number(r.balance_owing).toLocaleString()}`, colX.balance, rowY, { width: 65 });
+    doc.text(`${cur}${Number(r.fees_paid).toLocaleString()}`, colX.fees, rowY, { width: 65 });
+    doc.text(`${cur}${Number(r.balance_owing).toLocaleString()}`, colX.balance, rowY, { width: 65 });
     doc.moveDown(0.6);
   });
 
@@ -163,6 +207,7 @@ router.post('/:id/create-login', requireRole(SUPER_ADMIN, ADMINISTRATOR), (req, 
       VALUES (?, ?, ?, 'Student', ?)
     `).run(student.student_id, hash, fullName, student.id);
     logAction(req, 'CREATE', 'users', info.lastInsertRowid, { username: student.student_id, role: 'Student', linked_student_id: student.id });
+    notify(info.lastInsertRowid, 'ACCOUNT_CREATED', 'Welcome — your student portal login has been created.', 'users', info.lastInsertRowid);
     res.status(201).json({ id: info.lastInsertRowid, username: student.student_id });
   } catch (err) {
     if (String(err.message).includes('UNIQUE')) {
@@ -350,6 +395,7 @@ router.get('/:id/statement.pdf', staffOrSelf, (req, res) => {
   res.setHeader('Content-Disposition', `inline; filename="${student.student_id}-statement.pdf"`);
 
   const doc = newDocument({ title: 'Fee Statement' });
+  const cur = currencySymbol();
   doc.pipe(res);
 
   const studentName = [student.first_name, student.middle_name, student.surname].filter(Boolean).join(' ');
@@ -378,7 +424,7 @@ router.get('/:id/statement.pdf', staffOrSelf, (req, res) => {
     doc.text(p.payment_date, 50, rowY, { width: 90 });
     doc.text(p.receipt_no, 140, rowY, { width: 140 });
     doc.text(p.method, 280, rowY, { width: 100 });
-    doc.text(`K${Number(p.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 460, rowY, { width: 80, align: 'right' });
+    doc.text(`${cur}${Number(p.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}`, 460, rowY, { width: 80, align: 'right' });
     doc.moveDown(0.5);
   });
 
@@ -386,9 +432,9 @@ router.get('/:id/statement.pdf', staffOrSelf, (req, res) => {
   doc.moveTo(50, doc.y).lineTo(doc.page.width - 50, doc.y).stroke('#cccccc');
   doc.moveDown(0.5);
   doc.font('Helvetica-Bold').fontSize(11);
-  doc.text(`Total Fees: K${Number(student.total_fees).toLocaleString(undefined, { minimumFractionDigits: 2 })}`);
-  doc.text(`Total Paid: K${Number(student.fees_paid).toLocaleString(undefined, { minimumFractionDigits: 2 })}`);
-  doc.text(`Balance Owing: K${Number(student.balance_owing).toLocaleString(undefined, { minimumFractionDigits: 2 })}`);
+  doc.text(`Total Fees: ${cur}${Number(student.total_fees).toLocaleString(undefined, { minimumFractionDigits: 2 })}`);
+  doc.text(`Total Paid: ${cur}${Number(student.fees_paid).toLocaleString(undefined, { minimumFractionDigits: 2 })}`);
+  doc.text(`Balance Owing: ${cur}${Number(student.balance_owing).toLocaleString(undefined, { minimumFractionDigits: 2 })}`);
 
   footer(doc);
   doc.end();
@@ -419,6 +465,136 @@ function checkDuplicates(b, excludeId) {
   }
   return null;
 }
+
+// --- Excel/CSV import ---
+// Column headers are matched case-insensitively against a list of common
+// aliases, rather than requiring an exact layout — spreadsheets in the wild
+// rarely use identical headers.
+const COLUMN_ALIASES = {
+  first_name: ['first name', 'firstname', 'first'],
+  middle_name: ['middle name', 'middlename', 'middle'],
+  surname: ['surname', 'last name', 'lastname', 'last'],
+  gender: ['gender', 'sex'],
+  student_id: ['student id', 'student number', 'studentid', 'student id no', 'student id no.', 'id'],
+  nrc_no: ['nrc', 'nrc no', 'nrc no.', 'nrc number'],
+  program: ['program', 'programme'],
+  year_of_graduation: ['year of graduation', 'graduation year', 'grad year'],
+  total_fees: ['total fees', 'fees', 'tuition'],
+  fees_paid: ['fees paid', 'amount paid', 'paid'],
+  phone_number: ['phone', 'phone number', 'mobile', 'contact'],
+  email: ['email', 'email address'],
+};
+
+function buildColumnMap(headerRow) {
+  const map = {};
+  headerRow.forEach((header, colIndex) => {
+    if (!header) return;
+    const normalized = String(header).trim().toLowerCase();
+    for (const [field, aliases] of Object.entries(COLUMN_ALIASES)) {
+      if (aliases.includes(normalized) && map[field] === undefined) {
+        map[field] = colIndex;
+      }
+    }
+  });
+  return map;
+}
+
+router.post('/import-preview', requireRole(...WRITE_ROLES), (req, res) => {
+  const { data } = req.body || {};
+  if (!data) return res.status(400).json({ error: 'No file data received' });
+  let workbook;
+  try {
+    const buffer = Buffer.from(data.includes(',') ? data.split(',')[1] : data, 'base64');
+    workbook = XLSX.read(buffer, { type: 'buffer' });
+  } catch (err) {
+    return res.status(400).json({ error: 'Could not read this file as an Excel/CSV spreadsheet' });
+  }
+
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+  if (rows.length < 2) return res.status(400).json({ error: 'This sheet has no data rows' });
+
+  const columnMap = buildColumnMap(rows[0]);
+  if (columnMap.first_name === undefined || columnMap.surname === undefined) {
+    return res.status(400).json({ error: "Couldn't find First Name / Surname columns. Expected headers like 'First Name', 'Surname', 'Student ID', 'Programme', 'Total Fees', 'Fees Paid'." });
+  }
+
+  const existingIds = new Set(db.prepare('SELECT student_id FROM students').all().map((r) => r.student_id));
+  const seenInFile = new Set();
+  const preview = [];
+
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || row.every((c) => c == null || c === '')) continue;
+    const get = (field) => (columnMap[field] !== undefined ? row[columnMap[field]] : null);
+
+    const record = {
+      first_name: get('first_name') ? String(get('first_name')).trim() : '',
+      middle_name: get('middle_name') ? String(get('middle_name')).trim() : '',
+      surname: get('surname') ? String(get('surname')).trim() : '',
+      gender: get('gender') ? String(get('gender')).trim() : '',
+      student_id: get('student_id') ? String(get('student_id')).trim() : '',
+      nrc_no: get('nrc_no') ? String(get('nrc_no')).trim() : '',
+      program: get('program') ? String(get('program')).trim() : '',
+      year_of_graduation: get('year_of_graduation') ? String(get('year_of_graduation')).trim() : '',
+      total_fees: Number(get('total_fees')) || 0,
+      fees_paid: Number(get('fees_paid')) || 0,
+      phone_number: get('phone_number') ? String(get('phone_number')).trim() : '',
+      email: get('email') ? String(get('email')).trim() : '',
+    };
+
+    const errors = [];
+    if (!record.first_name) errors.push('Missing first name');
+    if (!record.surname) errors.push('Missing surname');
+    if (!record.student_id) errors.push('Missing student ID');
+    if (record.student_id && existingIds.has(record.student_id)) errors.push('Student ID already exists in the system (will be skipped)');
+    if (record.student_id && seenInFile.has(record.student_id)) errors.push('Duplicate student ID within this file (will be skipped)');
+    if (record.student_id) seenInFile.add(record.student_id);
+
+    preview.push({ row: i + 1, ...record, errors, valid: errors.length === 0 });
+  }
+
+  res.json({
+    rows: preview,
+    summary: { total: preview.length, valid: preview.filter((r) => r.valid).length, invalid: preview.filter((r) => !r.valid).length },
+  });
+});
+
+router.post('/import-commit', requireRole(...WRITE_ROLES), (req, res) => {
+  const { rows } = req.body || {};
+  if (!Array.isArray(rows)) return res.status(400).json({ error: 'rows array is required' });
+
+  const insert = db.prepare(`
+    INSERT INTO students (first_name, middle_name, surname, gender, student_id, nrc_no,
+      total_fees, fees_paid, balance_owing, year_of_graduation, program, phone_number, email, status)
+    VALUES (@first_name, @middle_name, @surname, @gender, @student_id, @nrc_no,
+      @total_fees, @fees_paid, @balance_owing, @year_of_graduation, @program, @phone_number, @email, 'Active')
+  `);
+
+  let imported = 0;
+  let skipped = 0;
+  const txn = db.transaction(() => {
+    for (const r of rows) {
+      if (!r.valid || !r.first_name || !r.surname || !r.student_id) { skipped++; continue; }
+      try {
+        insert.run({
+          first_name: r.first_name, middle_name: r.middle_name || null, surname: r.surname,
+          gender: r.gender || null, student_id: r.student_id, nrc_no: r.nrc_no || null,
+          total_fees: r.total_fees || 0, fees_paid: r.fees_paid || 0,
+          balance_owing: (r.total_fees || 0) - (r.fees_paid || 0),
+          year_of_graduation: r.year_of_graduation || null, program: r.program || null,
+          phone_number: r.phone_number || null, email: r.email || null,
+        });
+        imported++;
+      } catch (err) {
+        skipped++;
+      }
+    }
+  });
+  txn();
+  logAction(req, 'IMPORT', 'students', null, { imported, skipped });
+  res.json({ imported, skipped });
+});
 
 router.post('/', requireRole(...WRITE_ROLES), (req, res) => {
   const b = req.body || {};
@@ -514,9 +690,21 @@ router.put('/:id', requireRole(...WRITE_ROLES), (req, res) => {
 router.delete('/:id', requireRole(SUPER_ADMIN), (req, res) => {
   const existing = db.prepare('SELECT * FROM students WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Student not found' });
-  db.prepare('DELETE FROM students WHERE id = ?').run(req.params.id);
-  logAction(req, 'DELETE', 'students', req.params.id, { student_id: existing.student_id });
-  res.json({ ok: true });
+  try {
+    db.prepare('DELETE FROM students WHERE id = ?').run(req.params.id);
+    logAction(req, 'DELETE', 'students', req.params.id, { student_id: existing.student_id });
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.code === 'SQLITE_CONSTRAINT_FOREIGNKEY') {
+      const loginAccount = db.prepare('SELECT username FROM users WHERE linked_student_id = ?').get(req.params.id);
+      return res.status(409).json({
+        error: loginAccount
+          ? `This student has a linked login account (${loginAccount.username}). Delete that user account first, then try again.`
+          : 'This student has related records that prevent deletion.',
+      });
+    }
+    res.status(500).json({ error: 'Failed to delete student' });
+  }
 });
 
 module.exports = router;

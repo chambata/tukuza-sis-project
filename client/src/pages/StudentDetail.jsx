@@ -22,8 +22,9 @@ import {
   FINANCE_ROLES, RESULTS_ENTRY_ROLES, RESULTS_APPROVAL_ROLES, SUPER_ADMIN, ADMINISTRATOR,
   COURSE_REGISTRATION_ROLES,
 } from '../roles.js';
+import { useCurrency } from '../SettingsContext.jsx';
 
-const money = (n) => `K${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+const formatMoney = (n, cur) => `${cur}${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
 const emptyResultForm = { course_name: '', academic_year: '', semester: '', components: [], exam_score: '' };
 
 // The next workflow action available for a given status, and who can do it.
@@ -36,6 +37,8 @@ const WORKFLOW_STEPS = {
 const STATUS_COLOR = { Draft: 'default', Submitted: 'info', Approved: 'warning', Published: 'success', Locked: 'secondary' };
 
 export default function StudentDetail() {
+  const cur = useCurrency();
+  const money = (n) => formatMoney(n, cur);
   const { id } = useParams();
   const { user } = useAuth();
   const canCreateLogin = [SUPER_ADMIN, ADMINISTRATOR].includes(user?.role);

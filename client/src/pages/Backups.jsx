@@ -1,13 +1,15 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   Box, Typography, Paper, Table, TableHead, TableRow, TableCell, TableBody,
-  Button, IconButton, Alert,
+  Button, IconButton, Alert, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
 } from '@mui/material';
 import BackupIcon from '@mui/icons-material/Backup';
 import DownloadIcon from '@mui/icons-material/Download';
 import DeleteIcon from '@mui/icons-material/Delete';
 import FolderIcon from '@mui/icons-material/Folder';
 import SyncIcon from '@mui/icons-material/Sync';
+import RestoreIcon from '@mui/icons-material/Restore';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
 import api from '../api';
 
 function formatSize(bytes) {
@@ -22,6 +24,11 @@ export default function Backups() {
   const [busy, setBusy] = useState(false);
   const [secondaryFolder, setSecondaryFolder] = useState(null);
   const [syncBusy, setSyncBusy] = useState(false);
+
+  const [restoreTarget, setRestoreTarget] = useState(null); // { filename } or { upload: File }
+  const [confirmText, setConfirmText] = useState('');
+  const [restoring, setRestoring] = useState(false);
+  const [restoreError, setRestoreError] = useState('');
 
   const load = useCallback(() => {
     api.get('/backups').then((res) => setRows(res.data));
@@ -95,13 +102,51 @@ export default function Backups() {
     }
   }
 
+  function handleUploadFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setRestoreTarget({ upload: file });
+    setConfirmText('');
+    setRestoreError('');
+  }
+
+  async function doRestore() {
+    setRestoring(true);
+    setRestoreError('');
+    try {
+      if (restoreTarget.filename) {
+        await api.post(`/backups/${encodeURIComponent(restoreTarget.filename)}/restore`);
+      } else {
+        const file = restoreTarget.upload;
+        const reader = new FileReader();
+        const dataUrl = await new Promise((resolve, reject) => {
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        await api.post('/backups/upload-restore', { filename: file.name, data: dataUrl });
+      }
+      setRestoreTarget(null);
+      setMessage('Restore complete — the app is restarting now. If the window does not reload automatically in a few seconds, close and reopen it.');
+    } catch (err) {
+      setRestoreError(err.response?.data?.error || 'Restore failed');
+      setRestoring(false);
+    }
+  }
+
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h5" fontWeight={700}>Database Backups</Typography>
-        <Button variant="contained" startIcon={<BackupIcon />} onClick={createBackup} disabled={busy}>
-          {busy ? 'Backing up…' : 'Backup Now'}
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button component="label" variant="outlined" startIcon={<UploadFileIcon />}>
+            Restore from File
+            <input type="file" hidden accept=".db" onChange={handleUploadFile} />
+          </Button>
+          <Button variant="contained" startIcon={<BackupIcon />} onClick={createBackup} disabled={busy}>
+            {busy ? 'Backing up…' : 'Backup Now'}
+          </Button>
+        </Box>
       </Box>
 
       {message && <Alert severity="info" sx={{ mb: 2 }}>{message}</Alert>}
@@ -155,6 +200,10 @@ export default function Backups() {
                 <TableCell>{new Date(r.created_at).toLocaleString()}</TableCell>
                 <TableCell>{formatSize(r.size)}</TableCell>
                 <TableCell align="right">
+                  <IconButton size="small" title="Restore from this backup"
+                    onClick={() => { setRestoreTarget({ filename: r.filename }); setConfirmText(''); setRestoreError(''); }}>
+                    <RestoreIcon fontSize="small" />
+                  </IconButton>
                   <IconButton size="small" onClick={() => download(r.filename)}><DownloadIcon fontSize="small" /></IconButton>
                   <IconButton size="small" onClick={() => remove(r.filename)}><DeleteIcon fontSize="small" /></IconButton>
                 </TableCell>
@@ -163,6 +212,33 @@ export default function Backups() {
           </TableBody>
         </Table>
       </Paper>
+
+      <Dialog open={!!restoreTarget} onClose={() => !restoring && setRestoreTarget(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Restore Database</DialogTitle>
+        <DialogContent>
+          {restoreError && <Alert severity="error" sx={{ mb: 2 }}>{restoreError}</Alert>}
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            This replaces <strong>everything currently in the app</strong> — students, staff,
+            payments, results, everything — with the contents of{' '}
+            <strong>{restoreTarget?.filename || restoreTarget?.upload?.name}</strong>.
+            A safety backup of the current data is taken automatically first, but this
+            action cannot be undone from within the app. The app will restart afterward.
+          </Alert>
+          <TextField
+            label='Type "RESTORE" to confirm' fullWidth value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRestoreTarget(null)} disabled={restoring}>Cancel</Button>
+          <Button
+            variant="contained" color="error" disabled={confirmText !== 'RESTORE' || restoring}
+            onClick={doRestore}
+          >
+            {restoring ? 'Restoring…' : 'Restore and Restart'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
