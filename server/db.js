@@ -281,6 +281,8 @@ const DEFAULT_SETTINGS = {
   institution_logo: '',
   currency_code: 'ZMW',
   currency_symbol: 'K',
+  website_sync_url: '',
+  website_sync_key: '',
 };
 const insertSettingIfMissing = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
 const settingsTxn = db.transaction(() => {

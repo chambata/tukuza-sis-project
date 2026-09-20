@@ -125,14 +125,38 @@ needed. A few things to know:
   response, changed correctly each time — including that a corrupted/garbage
   file is rejected without touching anything.
 
+### Website integration (`web-portal/`)
+
+A separate, small deployable web app — its own folder, its own
+`package.json`, its own README with step-by-step deployment instructions —
+built for the URL the school's website already links to
+(`edu.fpuniversitycollege.com`, found in the live site's own nav under
+"SIS Portal"). It's a read-only replica: the desktop app stays the sole
+place anything is entered or changed, and periodically pushes a safe subset
+(published results, fees, programmes, public announcements) to this service,
+which serves a public homepage (no login) and a student login using the
+**same** Student ID/password as the desktop app.
+
+Verified end-to-end locally (not just unit-by-unit): ran both services,
+created a student and a published result on the desktop app, triggered a
+sync, and confirmed the student could log into the *separate* portal service
+with their desktop credentials and see their real fees/results — plus
+confirmed a wrong password and a missing sync key are both correctly
+rejected. I don't have hosting credentials for the school's actual domain,
+so deploying it live is the one piece I couldn't finish myself — see
+`web-portal/README.md` for exact steps (Render/Railway/VPS).
+
 ## Not yet built (planned next sprints, per the project roadmap)
 
 SMS/email integration would need a provider account (Twilio, an SMTP relay,
 etc.) this project doesn't have credentials for — the notification system is
-otherwise built and ready to plug that in. A Windows installer **has** been
-built and tested (see below) but only by running the installer's contents
-programmatically — it has not been run through an actual Windows install
-wizard by a human yet, so treat the first real install as a test.
+otherwise built and ready to plug that in. Automatic (scheduled) website
+sync isn't wired up yet — today it's a manual "Sync Now" button, the same
+pattern the daily auto-backup could be extended to cover. A Windows
+installer **has** been built and tested (see below) but only by running the
+installer's contents programmatically — it has not been run through an
+actual Windows install wizard by a human yet, so treat the first real
+install as a test.
 
 ## Project structure
 

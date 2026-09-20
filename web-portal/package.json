@@ -1,0 +1,24 @@
+{
+  "name": "tukuza-sis-web-portal",
+  "version": "0.1.0",
+  "description": "Public-facing Tukuza SIS web portal (student login + public programme/announcement listings). Receives a periodic read-only data sync from the desktop app; never writes back to it.",
+  "private": true,
+  "scripts": {
+    "server": "node server/index.js",
+    "client:build": "npm --prefix client run build",
+    "build": "npm --prefix client install && npm run client:build",
+    "start": "node server/index.js",
+    "postinstall": "npm --prefix client install"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.3.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2"
+  }
+}
