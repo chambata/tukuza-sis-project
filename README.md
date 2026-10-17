@@ -146,11 +146,45 @@ rejected. I don't have hosting credentials for the school's actual domain,
 so deploying it live is the one piece I couldn't finish myself — see
 `web-portal/README.md` for exact steps (Render/Railway/VPS).
 
+### Remote access & security hardening (`cloudflared/`)
+
+For letting students view results and lecturers edit them from a browser, the
+simplest correct design is to expose the **real, live** desktop app through a
+Cloudflare Tunnel — one database, nothing to sync. `cloudflared/README.md` has
+the full setup (config template included) and an honest list of what it does
+and doesn't protect. Making the API safe to put on the internet meant fixing
+several real problems first:
+
+- **Forgeable logins**: the session-signing secret was a hardcoded fallback
+  shared by every install (and public in this repo). Now a random per-install
+  secret, with a *Sign Everyone Out* button that rotates it. Same fix applied
+  to `web-portal/`.
+- **Public default password**: `admin` / `Admin@2026` is in this repo, so remote
+  access is **refused until it's changed** (the app forces the change on first
+  login; people at the PC are unaffected).
+- Brute-force protection (per-account lockout + per-IP rate limits), security
+  headers, a CORS allow-list, loopback-only listener, real client IPs in the
+  audit log (trusted only from the local tunnel process, so LAN users can't
+  spoof them), and a leak fix: the website sync secret was readable by any
+  logged-in user, including students.
+- The server now also serves the web client, so a browser can use the full app;
+  the desktop window is unchanged.
+
+Verified by test, not just by reading code: forged and rotated tokens are
+rejected; lockout and rate limits trip; the gate blocks a remote visitor and
+then opens after the password change; a spoofed `X-Forwarded-For` from the LAN is
+ignored; and the real use case works end to end as a remote visitor (lecturer
+enters/edits/submits marks, can't edit after submitting or approve their own;
+examinations officer publishes; the student sees only the published result).
+I could not create the tunnel itself — that needs your Cloudflare account.
+
 ## Not yet built (planned next sprints, per the project roadmap)
 
 SMS/email integration would need a provider account (Twilio, an SMTP relay,
 etc.) this project doesn't have credentials for — the notification system is
-otherwise built and ready to plug that in. Automatic (scheduled) website
+otherwise built and ready to plug that in. There is no two-factor login (Cloudflare Access in front of the site is the
+suggested stopgap), and online access works only while the school PC and the
+app are running. Automatic (scheduled) website
 sync isn't wired up yet — today it's a manual "Sync Now" button, the same
 pattern the daily auto-backup could be extended to cover. A Windows
 installer **has** been built and tested (see below) but only by running the

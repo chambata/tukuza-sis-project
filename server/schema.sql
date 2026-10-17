@@ -50,6 +50,16 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT
 );
 
+-- Brute-force protection: tracks failed login attempts per username,
+-- independent of IP-based rate limiting (which a distributed attempt could
+-- get around). Cleared to zero on a successful login.
+CREATE TABLE IF NOT EXISTS login_attempts (
+  username TEXT PRIMARY KEY,
+  failed_count INTEGER NOT NULL DEFAULT 0,
+  locked_until TEXT,
+  last_attempt_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS students (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   sn INTEGER,

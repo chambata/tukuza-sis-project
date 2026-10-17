@@ -1,12 +1,17 @@
 import axios from 'axios';
 
-// The Electron main process always starts the embedded API server on this
-// port (see server/index.js / electron/main.js). In development, Vite's dev
-// server would otherwise proxy a relative "/api" to it — but the *packaged*
-// app loads its HTML via file://, where a relative path resolves to nothing,
-// silently breaking every request (including login). Using an absolute URL
-// works in both dev and production, and CORS is already enabled server-side.
-const API_BASE_URL = 'http://localhost:4000/api';
+// Where the API lives depends on how this page was loaded:
+//  - file:// (the packaged Electron app): a relative "/api" resolves to
+//    nothing, so use the embedded server's absolute localhost address.
+//  - http(s):// served by the Express server itself (e.g. a browser reaching
+//    it through a Cloudflare Tunnel at https://sis.example.com): the page and
+//    the API are the same origin, so a relative "/api" is correct — and using
+//    localhost here would point at the *visitor's own machine*, not the server.
+//  - The Vite dev server (localhost:5173): same as file://, absolute URL,
+//    since Vite's proxy isn't relied on.
+const isFileProtocol = window.location.protocol === 'file:';
+const isViteDev = window.location.port === '5173';
+const API_BASE_URL = (isFileProtocol || isViteDev) ? 'http://127.0.0.1:4000/api' : '/api';
 
 const api = axios.create({ baseURL: API_BASE_URL });
 
@@ -31,4 +36,3 @@ api.interceptors.response.use(
 );
 
 export default api;
-

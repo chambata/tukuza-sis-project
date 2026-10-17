@@ -1,5 +1,6 @@
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const Database = require('better-sqlite3');
 const bcrypt = require('bcryptjs');
 
@@ -283,6 +284,18 @@ const DEFAULT_SETTINGS = {
   currency_symbol: 'K',
   website_sync_url: '',
   website_sync_key: '',
+  // Generated fresh per install (this expression runs once, at first launch,
+  // when the row doesn't exist yet — INSERT OR IGNORE below means it's never
+  // touched again after that). Replaces a hardcoded fallback secret that used
+  // to be shared across every installation, which would let anyone forge a
+  // valid session token for any role once the API is reachable from the
+  // internet.
+  jwt_secret: crypto.randomBytes(48).toString('hex'),
+  // Comma-separated list of extra origins (e.g. the public website's URL)
+  // allowed to call the API via CORS, beyond the desktop app's own built-in
+  // access (file://, localhost). Empty by default — nothing external is
+  // allowed until an Administrator explicitly adds it in Settings.
+  allowed_origins: '',
 };
 const insertSettingIfMissing = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
 const settingsTxn = db.transaction(() => {

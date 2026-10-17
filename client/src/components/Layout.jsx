@@ -22,6 +22,7 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import { useAuth } from '../AuthContext.jsx';
 import { useSettings } from '../SettingsContext.jsx';
 import NotificationBell from './NotificationBell.jsx';
+import ChangePasswordDialog from './ChangePasswordDialog.jsx';
 import {
   STAFF_ROLES, STUDENT, PROGRAMME_WRITE_ROLES, INTAKE_WRITE_ROLES,
   DEPARTMENT_WRITE_ROLES, FINANCE_ROLES, SYSTEM_ADMIN_ROLES, GRADE_SCALE_WRITE_ROLES,
@@ -49,7 +50,8 @@ const NAV_ITEMS = [
 ];
 
 export default function Layout({ children }) {
-  const { user, logout } = useAuth();
+  const { user, logout, mustChangePassword, clearMustChangePassword } = useAuth();
+  const [pwOpen, setPwOpen] = React.useState(false);
   const { settings } = useSettings();
   const location = useLocation();
   const navigate = useNavigate();
@@ -73,6 +75,9 @@ export default function Layout({ children }) {
           </IconButton>
           <Menu anchorEl={anchorEl} open={!!anchorEl} onClose={() => setAnchorEl(null)}>
             <MenuItem disabled>{user?.full_name || user?.username}</MenuItem>
+            <MenuItem onClick={() => { setAnchorEl(null); setPwOpen(true); }}>
+              Change password
+            </MenuItem>
             <MenuItem
               onClick={() => {
                 logout();
@@ -111,6 +116,12 @@ export default function Layout({ children }) {
         <Toolbar />
         {children}
       </Box>
+      <ChangePasswordDialog
+        open={mustChangePassword || pwOpen}
+        forced={mustChangePassword}
+        onClose={() => setPwOpen(false)}
+        onChanged={() => { clearMustChangePassword(); setPwOpen(false); }}
+      />
     </Box>
   );
 }

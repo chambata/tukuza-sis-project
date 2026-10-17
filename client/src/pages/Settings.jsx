@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Box, Typography, Paper, TextField, Button, Alert, Grid, Avatar } from '@mui/material';
 import SaveIcon from '@mui/icons-material/Save';
 import SyncIcon from '@mui/icons-material/Sync';
+import SecurityIcon from '@mui/icons-material/Security';
 import api from '../api';
 
 export default function Settings() {
@@ -11,6 +12,8 @@ export default function Settings() {
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
   const [syncError, setSyncError] = useState('');
+  const [securityMessage, setSecurityMessage] = useState('');
+  const [securityError, setSecurityError] = useState('');
 
   useEffect(() => {
     api.get('/settings').then((res) => setForm(res.data));
@@ -51,6 +54,23 @@ export default function Settings() {
       setSyncError(err.response?.data?.error || 'Sync failed');
     } finally {
       setSyncBusy(false);
+    }
+  }
+
+  async function rotateSecret() {
+    if (!window.confirm(
+      'This signs EVERYONE out immediately, including you. Use it if you suspect a login session or this machine has been compromised. Continue?'
+    )) return;
+    setSecurityError('');
+    setSecurityMessage('');
+    try {
+      await api.post('/settings/rotate-secret');
+      localStorage.removeItem('tukuza_token');
+      localStorage.removeItem('tukuza_user');
+      window.location.hash = '/login';
+      window.location.reload();
+    } catch (err) {
+      setSecurityError(err.response?.data?.error || 'Failed to rotate the session secret');
     }
   }
 
@@ -144,6 +164,31 @@ export default function Settings() {
             Last synced: {new Date(form.website_last_synced_at).toLocaleString()}
           </Typography>
         )}
+      </Paper>
+
+      <Paper sx={{ p: 3, maxWidth: 640, mt: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+          <SecurityIcon color="primary" />
+          <Typography fontWeight={600}>Security &amp; Remote Access</Typography>
+        </Box>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          If you expose this app to the internet (for example through a Cloudflare Tunnel so
+          students and lecturers can use it from home), these controls apply. The app itself
+          is always allowed to talk to its own server; list any <strong>other</strong> website
+          addresses that should be allowed to call it, separated by commas.
+        </Typography>
+        {securityMessage && <Alert severity="success" sx={{ mb: 2 }}>{securityMessage}</Alert>}
+        {securityError && <Alert severity="error" sx={{ mb: 2 }}>{securityError}</Alert>}
+        <TextField
+          label="Allowed Website Origins" fullWidth value={form.allowed_origins || ''}
+          onChange={(e) => setForm({ ...form, allowed_origins: e.target.value })}
+          placeholder="https://fpuniversitycollege.com, https://edu.fpuniversitycollege.com"
+          helperText="Leave empty if people will only open the app directly at its own address."
+        />
+        <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
+          <Button variant="outlined" startIcon={<SaveIcon />} onClick={save}>Save</Button>
+          <Button variant="outlined" color="error" onClick={rotateSecret}>Sign Everyone Out</Button>
+        </Box>
       </Paper>
     </Box>
   );

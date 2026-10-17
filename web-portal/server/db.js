@@ -27,5 +27,14 @@ if (!hasKey) {
   console.log('==================================================================');
 }
 
+// Per-install session-signing secret, generated once and kept in the database.
+// (Previously a hardcoded fallback shared by every deployment, which would
+// let anyone forge a student login token.)
+const hasJwt = db.prepare("SELECT value FROM settings WHERE key = 'jwt_secret'").get();
+if (!hasJwt) {
+  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)')
+    .run('jwt_secret', process.env.JWT_SECRET || crypto.randomBytes(48).toString('hex'));
+}
+
 module.exports = db;
 module.exports.DB_PATH = DB_PATH;

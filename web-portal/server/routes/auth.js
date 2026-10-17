@@ -4,7 +4,11 @@ const jwt = require('jsonwebtoken');
 const db = require('../db');
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'tukuza-portal-dev-secret-change-me';
+let cachedSecret = null;
+function getJwtSecret() {
+  if (!cachedSecret) cachedSecret = db.prepare("SELECT value FROM settings WHERE key = 'jwt_secret'").get().value;
+  return cachedSecret;
+}
 
 router.post('/login', (req, res) => {
   const { username, password } = req.body || {};
@@ -15,7 +19,7 @@ router.post('/login', (req, res) => {
   if (!student || !student.password_hash || !bcrypt.compareSync(password, student.password_hash)) {
     return res.status(401).json({ error: 'Invalid username or password' });
   }
-  const token = jwt.sign({ studentId: student.id, student_id: student.student_id }, JWT_SECRET, { expiresIn: '12h' });
+  const token = jwt.sign({ studentId: student.id, student_id: student.student_id }, getJwtSecret(), { expiresIn: '12h' });
   res.json({ token, student: { student_id: student.student_id, first_name: student.first_name, surname: student.surname } });
 });
 
@@ -24,11 +28,11 @@ function requireAuth(req, res, next) {
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) return res.status(401).json({ error: 'Authentication required' });
   try {
-    req.student = jwt.verify(token, JWT_SECRET);
+    req.student = jwt.verify(token, getJwtSecret());
     next();
   } catch (err) {
     return res.status(401).json({ error: 'Invalid or expired session' });
   }
 }
 
-module.exports = { router, requireAuth, JWT_SECRET };
+module.exports = { router, requireAuth, getJwtSecret };

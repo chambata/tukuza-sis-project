@@ -1,0 +1,17 @@
+# Cloudflare Tunnel config for Tukuza SIS.
+#
+# Copy this to  C:\Users\<YOU>\.cloudflared\config.yml  and replace the two
+# <PLACEHOLDERS>. Both values are printed by `cloudflared tunnel create`.
+#
+# The hostname below is the one the school website's "SIS Portal" nav link
+# already points to, so the website itself needs no change.
+
+tunnel: <TUNNEL-UUID>
+credentials-file: C:\Users\<YOU>\.cloudflared\<TUNNEL-UUID>.json
+
+ingress:
+  - hostname: edu.fpuniversitycollege.com
+    # 127.0.0.1 (not "localhost"): the SIS server listens on IPv4 loopback only.
+    service: http://127.0.0.1:4000
+  # Anything else that reaches this tunnel gets a plain 404.
+  - service: http_status:404

@@ -1,3 +1,4 @@
+const { invalidateDefaultPasswordCache } = require('../lib/defaultPassword');
 const { SYSTEM_ADMIN_ROLES, STAFF_ROLES, LECTURER } = require('../lib/roles');
 const { notify } = require('../lib/notifications');
 const express = require('express');
@@ -55,6 +56,7 @@ router.put('/:id/reset-password', (req, res) => {
   }
   const hash = bcrypt.hashSync(newPassword, 10);
   db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, req.params.id);
+  invalidateDefaultPasswordCache();
   logAction(req, 'RESET_PASSWORD', 'users', req.params.id);
   res.json({ ok: true });
 });
