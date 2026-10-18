@@ -10,6 +10,22 @@ const { isDefaultAdminPasswordInUse } = require('./lib/defaultPassword');
 const app = express();
 const LOOPBACK_IPS = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 
+// A request counts as "local" (the desktop app, or someone at this PC) only if
+// it came from loopback AND carries no sign of having passed through a proxy.
+// Tunnel traffic also arrives from loopback (cloudflared runs on this PC), so
+// the address alone can't tell the two apart. Cloudflare always adds
+// X-Forwarded-For, but that header is absent if a Cloudflare Worker handles
+// the request, and customers cannot strip the cf-* headers — so checking all
+// of these means tunnel traffic can't be mistaken for local use. The desktop
+// window never sends any of them.
+const PROXY_MARKER_HEADERS = [
+  'x-forwarded-for', 'x-real-ip', 'forwarded', 'true-client-ip',
+  'cf-connecting-ip', 'cf-ray', 'cf-visitor', 'cdn-loop',
+];
+function isLocalRequest(req) {
+  return LOOPBACK_IPS.has(req.ip) && !PROXY_MARKER_HEADERS.some((h) => req.headers[h] !== undefined);
+}
+
 // Behind Cloudflare Tunnel, the real client IP arrives in X-Forwarded-For —
 // but only trust that header when the immediate peer is loopback (i.e.
 // cloudflared running on this same machine). 'loopback' rather than a hop
@@ -58,7 +74,7 @@ app.use(express.json({ limit: '20mb' })); // allow base64 passport photo uploads
 app.use('/api', rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 600,
-  skip: (req) => LOOPBACK_IPS.has(req.ip), // never throttle the desktop app's own local UI
+  skip: (req) => isLocalRequest(req), // never throttle the desktop app's own local UI
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests — please slow down and try again shortly.' },
@@ -83,7 +99,7 @@ app.use('/api/auth/login', rateLimit({
 // so the intended flow still works — change the password locally first, and
 // remote access switches on by itself.
 app.use('/api', (req, res, next) => {
-  if (req.path === '/health' || LOOPBACK_IPS.has(req.ip)) return next();
+  if (req.path === '/health' || isLocalRequest(req)) return next();
   if (isDefaultAdminPasswordInUse()) {
     return res.status(503).json({
       error: 'Remote access is disabled until the administrator changes the default password. Please ask them to sign in at the school computer and change it.',

@@ -38,19 +38,21 @@ PC's own loopback address.
 ## Quick test (no domain, no account, 2 minutes)
 
 ```powershell
-winget install --id Cloudflare.cloudflared
 cloudflared tunnel --url http://127.0.0.1:4000
 ```
+(Get `cloudflared.exe` from Cloudflare's official downloads page,
+https://developers.cloudflare.com/tunnel/downloads/ . A `winget` package named
+`Cloudflare.cloudflared` also exists, but I couldn't confirm it in Cloudflare's
+own docs, so treat the downloads page as the authoritative source.)
 It prints a temporary `https://<random-words>.trycloudflare.com` address that
 works while the command is running. Good for trying it out; **not** for
 production — the address changes every time.
 
 ## Permanent setup
 
-Run these in PowerShell on the SIS computer:
+Install `cloudflared` first (see the downloads page above), then run these in PowerShell on the SIS computer:
 
 ```powershell
-winget install --id Cloudflare.cloudflared
 cloudflared tunnel login                         # opens a browser; pick fpuniversitycollege.com
 cloudflared tunnel create tukuza-sis             # prints a TUNNEL-UUID and writes a credentials .json
 ```
@@ -64,14 +66,30 @@ cloudflared tunnel run tukuza-sis                # test it; Ctrl+C to stop
 Open `https://edu.fpuniversitycollege.com` from your phone (on mobile data, not
 the school Wi-Fi) to confirm it works from outside.
 
-To keep it running permanently, in an **Administrator** PowerShell:
-```powershell
-cloudflared service install
-```
-If the service starts but can't find its config, it's usually because Windows
-services read from a different user profile; copy `config.yml` and the
-credentials `.json` into the folder named in the error (or Event Viewer), or
-reinstall passing the config path explicitly.
+### Keeping it running permanently (Windows service)
+
+Windows services run as the SYSTEM account, which has its **own** `.cloudflared`
+folder — so the files you created as yourself aren't found automatically.
+This is Cloudflare's documented procedure
+(https://developers.cloudflare.com/tunnel/features/locally-managed-tunnels/as-a-service/windows/),
+in an **Administrator** Command Prompt:
+
+1. Put `cloudflared.exe` somewhere permanent, e.g. `C:\Cloudflared\bin`, and run
+   `cloudflared.exe service install` from there.
+2. `mkdir C:\Windows\System32\config\systemprofile\.cloudflared`
+3. Copy these three files from `C:\Users\<you>\.cloudflared\` into that folder:
+   `cert.pem`, `config.yml`, and `<TUNNEL-UUID>.json`.
+4. In the **copied** `config.yml`, change `credentials-file:` to
+   `C:\Windows\System32\config\systemprofile\.cloudflared\<TUNNEL-UUID>.json`.
+5. Check it: `cloudflared.exe tunnel ingress validate`
+6. In Registry Editor, open
+   `HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\Cloudflared` and set
+   `ImagePath` to (no stray spaces):
+   `C:\Cloudflared\bin\cloudflared.exe --config=C:\Windows\System32\config\systemprofile\.cloudflared\config.yml tunnel run`
+7. `sc start cloudflared`
+
+After any later change to the config, restart the service. The service starts
+when Windows starts, but it only helps if the SIS app is also running.
 
 ## What changed in the app to make this safe
 
@@ -82,7 +100,8 @@ reinstall passing the config path explicitly.
 | Per-install session secret | Generated randomly on first launch, stored in the database. (It used to be a hardcoded fallback shared by every install, which would have let anyone forge an admin login.) |
 | Account lockout | 5 wrong passwords locks that account for 15 minutes, even for the right password. |
 | Rate limits | 20 login attempts / 15 min per visitor IP; 600 requests / 15 min for remote visitors. The desktop's own local use is never throttled. |
-| Real client IPs | Read from `X-Forwarded-For` **only** when the connection comes from the PC itself (i.e. cloudflared), so LAN users can't spoof it. Login IPs are recorded in the audit log. |
+| Real client IPs | Read from `X-Forwarded-For` **only** when the connection comes from the PC itself (i.e. cloudflared), so LAN users can't spoof it. Login IPs are recorded in the audit log. Cloudflare always appends the visitor's address there (their docs confirm the *Remove visitor IP headers* setting can't remove it for ordinary traffic). |
+| Tunnel traffic can't pass as local | A request counts as "local" only if it has no proxy markers (`X-Forwarded-For`, `CF-Ray`, `CF-Connecting-IP`, `CDN-Loop`, …). This closes a gap that would otherwise exist if a Cloudflare Worker handled your hostname, which drops `X-Forwarded-For`. |
 | CORS allow-list | Only the app itself plus origins you add in Settings → Security. Not needed if people simply open the site's address directly. |
 | Settings hygiene | Sync secrets and the allow-list are hidden from non-admin accounts. |
 | Sign everyone out | Settings → Security → *Sign Everyone Out* rotates the session secret instantly. |

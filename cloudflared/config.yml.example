@@ -8,6 +8,9 @@
 
 tunnel: <TUNNEL-UUID>
 credentials-file: C:\Users\<YOU>\.cloudflared\<TUNNEL-UUID>.json
+# If you later run this as a Windows service, see cloudflared/README.md: the
+# service reads its own copy under
+# C:\Windows\System32\config\systemprofile\.cloudflared\
 
 ingress:
   - hostname: edu.fpuniversitycollege.com
